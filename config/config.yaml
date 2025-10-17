@@ -1,0 +1,6 @@
+# Configuration for FuggerBot
+assets:
+  - ticker: INTC
+    trigger_below: 22
+  - ticker: BTC-USD
+    drop_pct_trigger: 30
