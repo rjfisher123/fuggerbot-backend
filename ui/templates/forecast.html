@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Forecast Dashboard - FuggerBot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Create Forecast</h3>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i> <strong>Error:</strong> {{ error }}
+                </div>
+                {% endif %}
+
+                {% if forecast_result %}
+                <div class="alert alert-success mb-4" role="alert">
+                    <h5 class="alert-heading"><i class="bi bi-check-circle"></i> Forecast Created Successfully!</h5>
+                    <hr>
+                    <p><strong>Forecast ID:</strong> <code>{{ forecast_result.forecast_id }}</code></p>
+                    <p><strong>Symbol:</strong> {{ forecast_result.symbol }}</p>
+                    <p><strong>Horizon:</strong> {{ forecast_result.forecast_horizon }} days</p>
+                    <p><strong>Trust Score:</strong> {{ "%.2f"|format(forecast_result.trust_score * 100) }}%</p>
+                    {% if forecast_result.fqs_score %}
+                    <p><strong>FQS Score:</strong> {{ "%.2f"|format(forecast_result.fqs_score * 100) }}%</p>
+                    {% endif %}
+                    {% if forecast_result.recommendation %}
+                    <p><strong>Recommendation:</strong> 
+                        <span class="badge {% if forecast_result.recommendation.action == 'BUY' %}bg-success{% elif forecast_result.recommendation.action == 'SELL' %}bg-danger{% else %}bg-secondary{% endif %}">
+                            {{ forecast_result.recommendation.action }}
+                        </span>
+                    </p>
+                    {% endif %}
+                    <hr>
+                    <p class="mb-0">
+                        <a href="/forecast" class="btn btn-primary">Create Another Forecast</a>
+                        <a href="/api/forecast/{{ forecast_result.forecast_id }}" class="btn btn-outline-primary" target="_blank">View JSON</a>
+                    </p>
+                </div>
+                {% endif %}
+
+                <h5 class="mb-3">{% if forecast_result %}Create New Forecast{% else %}Enter Forecast Details{% endif %}</h5>
+                <form method="POST" action="/forecast">
+                    <div class="mb-3">
+                        <label for="symbol" class="form-label">Trading Symbol</label>
+                        <input type="text" class="form-control" id="symbol" name="symbol" 
+                               placeholder="AAPL" value="{{ symbol or '' }}" required 
+                               pattern="[A-Z]{1,10}" title="1-10 uppercase letters">
+                        <div class="form-text">Enter a stock symbol (e.g., AAPL, MSFT, GOOGL)</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="forecast_horizon" class="form-label">Forecast Horizon (days)</label>
+                        <input type="number" class="form-control" id="forecast_horizon" name="forecast_horizon" 
+                               value="{{ forecast_horizon or 30 }}" min="1" max="365" required>
+                        <div class="form-text">Number of days to forecast (1-365)</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="historical_period" class="form-label">Historical Period (days)</label>
+                        <input type="number" class="form-control" id="historical_period" name="historical_period" 
+                               value="{{ historical_period or 252 }}" min="20" max="1000">
+                        <div class="form-text">Number of days of historical data to use (default: 252 = ~1 year)</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="context_length" class="form-label">Context Length</label>
+                        <input type="number" class="form-control" id="context_length" name="context_length" 
+                               value="{{ context_length or '' }}" min="20" max="500">
+                        <div class="form-text">Model context window size (optional, model default if not specified)</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="strict_mode" name="strict_mode" 
+                                   {% if strict_mode %}checked{% endif %}>
+                            <label class="form-check-label" for="strict_mode">
+                                Strict Mode
+                            </label>
+                        </div>
+                        <div class="form-text">Enable stricter trust filters and more conservative signals</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="deterministic_mode" name="deterministic_mode" 
+                                   {% if deterministic_mode %}checked{% endif %}>
+                            <label class="form-check-label" for="deterministic_mode">
+                                Deterministic Mode
+                            </label>
+                        </div>
+                        <div class="form-text">Enable deterministic forecasting for reproducible results</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="min_trust_score" class="form-label">Minimum Trust Score</label>
+                        <input type="number" class="form-control" id="min_trust_score" name="min_trust_score" 
+                               value="{{ min_trust_score or 0.5 }}" min="0" max="1" step="0.01">
+                        <div class="form-text">Minimum trust score required (0.0 - 1.0, default: 0.5)</div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-calculator"></i> Generate Forecast
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> How It Works</h5>
+            </div>
+            <div class="card-body">
+                <ol>
+                    <li>Enter a trading symbol (e.g., AAPL, MSFT)</li>
+                    <li>Specify the forecast horizon (how many days ahead to predict)</li>
+                    <li>Optionally adjust advanced settings (context length, strict mode, etc.)</li>
+                    <li>Click "Generate Forecast" to create a forecast using Amazon Chronos</li>
+                    <li>Review the forecast results including trust score, FQS score, and trading recommendation</li>
+                </ol>
+                <p class="text-muted mb-0">
+                    <strong>Note:</strong> The system will automatically fetch historical price data for the symbol. 
+                    Historical data is fetched using yfinance.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

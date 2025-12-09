@@ -1,0 +1,48 @@
+[
+  {
+    "symbol": "INTC",
+    "condition": "<",
+    "price": 22.0,
+    "action": "notify",
+    "enabled": true
+  },
+  {
+    "symbol": "BTC",
+    "condition": "drop_pct",
+    "value": 0.25,
+    "action": "layer_in",
+    "enabled": true
+  },
+  {
+    "symbol": "AAPL",
+    "condition": "<",
+    "value": 270.0,
+    "price": 270.0,
+    "action": "notify",
+    "enabled": true
+  },
+  {
+    "symbol": "TEST",
+    "condition": "<",
+    "value": 100.0,
+    "price": 100.0,
+    "action": "notify",
+    "enabled": true
+  },
+  {
+    "symbol": "AAPL",
+    "condition": "<",
+    "value": 270.0,
+    "price": 270.0,
+    "action": "notify",
+    "enabled": true
+  },
+  {
+    "symbol": "AAPL",
+    "condition": "<",
+    "value": 270.0,
+    "price": 270.0,
+    "action": "notify",
+    "enabled": true
+  }
+]

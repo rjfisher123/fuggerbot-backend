@@ -3,4 +3,7 @@
 AI-powered asymmetric investment automation.
 
 ## Structure
-See `/core`, `/dash`, `/data`, and `/config` for modular architecture.
+- `api/` – FastAPI routers (forecast, backtest, triggers, trades, portfolio)
+- `services/` – Business logic shared by API + background jobs
+- `ui/templates/` – Jinja templates for the dashboard
+- `dash/` – Legacy Streamlit UI (deprecated, see `LEGACY_STREAMLIT.md`)

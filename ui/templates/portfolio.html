@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio Dashboard - FuggerBot{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h3 class="mb-0"><i class="bi bi-wallet2"></i> Portfolio Overview</h3>
+                <small>Last updated: {{ last_updated }}</small>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3 mb-3">
+                        <h6 class="text-muted">Initial Capital</h6>
+                        <h3>${{ "{:,.2f}".format(summary.initial_capital) }}</h3>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <h6 class="text-muted">Total Capital</h6>
+                        <h3>${{ "{:,.2f}".format(summary.total_capital) }}</h3>
+                        <small class="{% if summary.total_return_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "{:+.2f}%".format(summary.total_return_pct) }}
+                        </small>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <h6 class="text-muted">Realized P/L</h6>
+                        <h3>${{ "{:,.2f}".format(summary.total_realized_pnl) }}</h3>
+                        <small class="{% if summary.total_realized_pnl_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "{:+.2f}%".format(summary.total_realized_pnl_pct) }}
+                        </small>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <h6 class="text-muted">Win Rate</h6>
+                        <h3>{{ "{:.1f}%".format(summary.win_rate) }}</h3>
+                        <small>{{ summary.closed_trades }} closed trades</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Open Positions ({{ open_positions|length }})</h5>
+            </div>
+            <div class="card-body">
+                {% if open_positions %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Entry Price</th>
+                                <th>Current Price</th>
+                                <th>Shares</th>
+                                <th>Position Value</th>
+                                <th>Unrealized P/L</th>
+                                <th>P/L %</th>
+                                <th>Entry Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for position in open_positions %}
+                            <tr>
+                                <td><strong>{{ position.symbol }}</strong></td>
+                                <td>${{ "{:.2f}".format(position.entry_price) }}</td>
+                                <td>
+                                    $<span id="live-price-{{ position.symbol }}">{{ "{:.2f}".format(position.current_price or position.entry_price) }}</span>
+                                    <small class="text-muted ms-1" id="price-update-{{ position.symbol }}"></small>
+                                </td>
+                                <td>{{ "{:.2f}".format(position.shares) }}</td>
+                                <td>${{ "{:,.2f}".format(position.position_value) }}</td>
+                                <td class="{% if position.unrealized_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    ${{ "{:,.2f}".format(position.unrealized_pnl) }}
+                                </td>
+                                <td class="{% if position.unrealized_pnl_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ "{:+.2f}%".format(position.unrealized_pnl_pct) }}
+                                </td>
+                                <td>{{ position.entry_date or "N/A" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No open positions at the moment.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Position Price Charts -->
+        {% if open_positions %}
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Position Price Charts</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for position in open_positions %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">{{ position.symbol }} - Price Chart</h6>
+                                <small>Entry: ${{ "{:.2f}".format(position.entry_price) }} | Current: <span id="chart-price-{{ position.symbol }}">${{ "{:.2f}".format(position.current_price or position.entry_price) }}</span></small>
+                            </div>
+                            <div class="card-body">
+                                <div id="position-chart-{{ position.symbol }}" style="height: 300px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-journal-text"></i> Recent Paper Trades</h5>
+            </div>
+            <div class="card-body">
+                {% if trade_history %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>P/L</th>
+                                <th>P/L %</th>
+                                <th>Reason</th>
+                                <th>Days Held</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trade in trade_history[:20] %}
+                            <tr>
+                                <td><strong>{{ trade.symbol }}</strong></td>
+                                <td>${{ "{:.2f}".format(trade.entry_price) }}</td>
+                                <td>${{ "{:.2f}".format(trade.exit_price) }}</td>
+                                <td class="{% if trade.pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    ${{ "{:,.2f}".format(trade.pnl) }}
+                                </td>
+                                <td class="{% if trade.pnl_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ "{:+.2f}%".format(trade.pnl_pct) }}
+                                </td>
+                                <td>{{ trade.exit_reason or "N/A" }}</td>
+                                <td>{{ trade.holding_period_days or 0 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No paper trades recorded yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Portfolio Performance Chart -->
+        {% if trade_history %}
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Portfolio Performance</h5>
+            </div>
+            <div class="card-body">
+                <div id="portfolio-performance-chart" style="height: 400px;"></div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+<script>
+    // Load position charts
+    {% if open_positions %}
+    const positions = {{ open_positions|tojson }};
+    
+    async function loadPositionChart(symbol, entryPrice) {
+        try {
+            const response = await fetch(`/api/market/chart/${symbol}?period=5d&interval=15m`);
+            const data = await response.json();
+            
+            if (data && data.data) {
+                const chartData = [
+                    {
+                        x: data.data.timestamps,
+                        y: data.data.close,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'Price',
+                        line: { color: '#1f77b4' }
+                    },
+                    {
+                        x: [data.data.timestamps[0], data.data.timestamps[data.data.timestamps.length - 1]],
+                        y: [entryPrice, entryPrice],
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'Entry Price',
+                        line: { color: '#ff7f0e', dash: 'dash' }
+                    }
+                ];
+                
+                const layout = {
+                    title: `${symbol} - Last 5 Days`,
+                    xaxis: { title: 'Time' },
+                    yaxis: { title: 'Price ($)' },
+                    height: 300,
+                    margin: { l: 50, r: 20, t: 40, b: 40 },
+                    showlegend: true
+                };
+                
+                Plotly.newPlot(`position-chart-${symbol}`, chartData, layout);
+                
+                // Update current price
+                if (data.current_price) {
+                    document.getElementById(`chart-price-${symbol}`).textContent = `$${data.current_price.toFixed(2)}`;
+                    document.getElementById(`live-price-${symbol}`).textContent = data.current_price.toFixed(2);
+                    document.getElementById(`price-update-${symbol}`).textContent = new Date().toLocaleTimeString();
+                }
+            }
+        } catch (error) {
+            console.error(`Error loading chart for ${symbol}:`, error);
+        }
+    }
+    
+    // Load all position charts
+    positions.forEach(position => {
+        loadPositionChart(position.symbol, position.entry_price);
+        // Refresh every 30 seconds
+        setInterval(() => {
+            loadPositionChart(position.symbol, position.entry_price);
+            // Also update live price
+            fetch(`/api/market/price/${position.symbol}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.price) {
+                        document.getElementById(`live-price-${position.symbol}`).textContent = data.price.toFixed(2);
+                        document.getElementById(`chart-price-${position.symbol}`).textContent = `$${data.price.toFixed(2)}`;
+                        document.getElementById(`price-update-${position.symbol}`).textContent = new Date().toLocaleTimeString();
+                    }
+                })
+                .catch(err => console.error(`Error updating price for ${position.symbol}:`, err));
+        }, 30000);
+    });
+    {% endif %}
+    
+    // Load portfolio performance chart
+    {% if trade_history %}
+    async function loadPortfolioPerformance() {
+        try {
+            // Calculate cumulative P/L over time
+            const trades = {{ trade_history|tojson }};
+            
+            if (trades && trades.length > 0) {
+                // Sort by date and calculate cumulative P/L
+                const sortedTrades = trades
+                    .filter(t => t.exit_date || t.entry_date)
+                    .sort((a, b) => {
+                        const dateA = new Date(a.exit_date || a.entry_date);
+                        const dateB = new Date(b.exit_date || b.entry_date);
+                        return dateA - dateB;
+                    });
+                
+                let cumulativePnL = 0;
+                const dates = [];
+                const pnlValues = [];
+                
+                sortedTrades.forEach(trade => {
+                    if (trade.pnl !== undefined) {
+                        cumulativePnL += trade.pnl || 0;
+                        dates.push(trade.exit_date || trade.entry_date);
+                        pnlValues.push(cumulativePnL);
+                    }
+                });
+                
+                if (dates.length > 0) {
+                    const chartData = [{
+                        x: dates,
+                        y: pnlValues,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: 'Cumulative P/L',
+                        line: { color: pnlValues[pnlValues.length - 1] >= 0 ? '#2ca02c' : '#d62728' },
+                        fill: 'tozeroy',
+                        fillcolor: pnlValues[pnlValues.length - 1] >= 0 ? 'rgba(44, 160, 44, 0.2)' : 'rgba(214, 39, 40, 0.2)'
+                    }];
+                    
+                    const layout = {
+                        title: 'Portfolio Cumulative P/L Over Time',
+                        xaxis: { title: 'Date' },
+                        yaxis: { title: 'Cumulative P/L ($)' },
+                        height: 400,
+                        hovermode: 'closest'
+                    };
+                    
+                    Plotly.newPlot('portfolio-performance-chart', chartData, layout);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading portfolio performance:', error);
+        }
+    }
+    
+    loadPortfolioPerformance();
+    {% endif %}
+</script>
+{% endblock %}
+

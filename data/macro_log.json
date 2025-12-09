@@ -1,0 +1,20 @@
+{
+  "shifts": [
+    {
+      "timestamp": "2025-12-08T21:16:13.439028",
+      "old_regime": {
+        "id": "NEUTRAL",
+        "name": "Neutral Market Regime",
+        "risk_on": true,
+        "vibe_score": 0.5
+      },
+      "new_regime": {
+        "id": "AI_BOOM_2024",
+        "name": "AI Boom",
+        "risk_on": true,
+        "vibe_score": 0.8
+      }
+    }
+  ],
+  "last_updated": "2025-12-08T21:16:13.439046"
+}

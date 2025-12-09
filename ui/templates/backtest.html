@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Backtest Dashboard - FuggerBot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h3 class="mb-0"><i class="bi bi-clipboard-check"></i> Evaluate Forecast Accuracy</h3>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i> <strong>Error:</strong> {{ error }}
+                </div>
+                {% endif %}
+
+                {% if backtest_result %}
+                <div class="alert alert-success mb-4" role="alert">
+                    <h5 class="alert-heading"><i class="bi bi-check-circle"></i> Backtest Completed Successfully!</h5>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Backtest ID:</strong> <code>{{ backtest_result.id }}</code></p>
+                            <p><strong>Forecast ID:</strong> <code>{{ backtest_result.forecast_id }}</code></p>
+                            <p><strong>Symbol:</strong> {{ backtest_result.symbol }}</p>
+                            <p><strong>Horizon:</strong> {{ backtest_result.horizon }} days</p>
+                            <p><strong>Realised Prices:</strong> {{ backtest_result.realised_series|length }} data points</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Created:</strong> {{ backtest_result.created_at }}</p>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-3">Evaluation Metrics</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">Mean Absolute Error</h6>
+                                    <h4 class="card-title">${{ "%.2f"|format(backtest_result.metrics.mae) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">MAPE</h6>
+                                    <h4 class="card-title">{{ "%.2f"|format(backtest_result.metrics.mape) }}%</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2 text-muted">RMSE</h6>
+                                    <h4 class="card-title">${{ "%.2f"|format(backtest_result.metrics.rmse) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-md-6 mb-3">
+                            <div class="card {% if backtest_result.metrics.directional_accuracy >= 50 %}bg-success text-white{% else %}bg-warning{% endif %}">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2">Directional Accuracy</h6>
+                                    <h4 class="card-title">{{ "%.1f"|format(backtest_result.metrics.directional_accuracy) }}%</h4>
+                                    {% if backtest_result.metrics.directional_correct and backtest_result.metrics.directional_total %}
+                                    <small>{{ backtest_result.metrics.directional_correct }} / {{ backtest_result.metrics.directional_total }} correct</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card {% if backtest_result.metrics.well_calibrated %}bg-success text-white{% else %}bg-danger text-white{% endif %}">
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-2">Calibration</h6>
+                                    <h4 class="card-title">
+                                        {% if backtest_result.metrics.well_calibrated %}
+                                        <i class="bi bi-check-circle"></i> Well Calibrated
+                                        {% else %}
+                                        <i class="bi bi-x-circle"></i> Not Calibrated
+                                        {% endif %}
+                                    </h4>
+                                    <small>
+                                        Coverage: {{ "%.1f"|format(backtest_result.metrics.calibration_coverage) }}%
+                                        {% if backtest_result.metrics.calibration_expected %}
+                                        (expected {{ "%.1f"|format(backtest_result.metrics.calibration_expected) }}%)
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <p class="mb-0">
+                        <a href="/backtest" class="btn btn-primary">Evaluate Another Forecast</a>
+                        <a href="/api/backtest/{{ backtest_result.id }}" class="btn btn-outline-primary" target="_blank">View JSON</a>
+                    </p>
+                </div>
+                {% endif %}
+
+                <h5 class="mb-3">{% if backtest_result %}Evaluate New Forecast{% else %}Enter Backtest Details{% endif %}</h5>
+                <form method="POST" action="/backtest">
+                    <div class="mb-3">
+                        <label for="forecast_id" class="form-label">Forecast ID</label>
+                        <input type="text" class="form-control" id="forecast_id" name="forecast_id" 
+                               placeholder="4a3c17277933a59b" value="{{ forecast_id or '' }}" required>
+                        <div class="form-text">Enter the Forecast ID you want to evaluate (from a previous forecast)</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="realised_prices" class="form-label">Realised Prices (comma-separated)</label>
+                        <textarea class="form-control" id="realised_prices" name="realised_prices" 
+                                  rows="4" placeholder="175.50, 176.20, 175.80, 177.10, ..." required>{{ realised_prices or '' }}</textarea>
+                        <div class="form-text">
+                            Enter the actual prices that occurred during the forecast horizon, separated by commas.
+                            <br>
+                            <strong>Example:</strong> <code>175.50, 176.20, 175.80, 177.10, 178.50</code>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="bi bi-calculator"></i> Run Backtest Evaluation
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> How It Works</h5>
+            </div>
+            <div class="card-body">
+                <ol>
+                    <li>Enter the <strong>Forecast ID</strong> from a previously created forecast</li>
+                    <li>Enter the <strong>Realised Prices</strong> that actually occurred during the forecast period (comma-separated)</li>
+                    <li>Click "Run Backtest Evaluation" to compare the forecast against actual outcomes</li>
+                    <li>Review the evaluation metrics:
+                        <ul>
+                            <li><strong>MAE (Mean Absolute Error):</strong> Average absolute difference between predicted and actual prices</li>
+                            <li><strong>MAPE (Mean Absolute Percentage Error):</strong> Average percentage error</li>
+                            <li><strong>RMSE (Root Mean Squared Error):</strong> Square root of average squared errors</li>
+                            <li><strong>Directional Accuracy:</strong> Percentage of correctly predicted price direction (up/down)</li>
+                            <li><strong>Calibration:</strong> Whether the forecast uncertainty bounds match actual outcomes</li>
+                        </ul>
+                    </li>
+                </ol>
+                <p class="text-muted mb-0">
+                    <strong>Tip:</strong> You can get a Forecast ID from the <a href="/forecast">Forecast Dashboard</a> after creating a forecast.
+                    Make sure the number of realised prices matches the forecast horizon.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+
+

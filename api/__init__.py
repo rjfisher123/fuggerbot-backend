@@ -1,0 +1,5 @@
+"""FastAPI routes for FuggerBot."""
+
+
+
+

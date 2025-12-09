@@ -1,0 +1,47 @@
+<tr id="candidate-row-{{ candidate.id }}">
+    <td><strong>{{ candidate.symbol }}</strong></td>
+    <td>
+        {% if candidate.action == "BUY" %}
+            <span class="badge bg-success">{{ candidate.action }}</span>
+        {% elif candidate.action == "SELL" %}
+            <span class="badge bg-danger">{{ candidate.action }}</span>
+        {% else %}
+            <span class="badge bg-secondary">{{ candidate.action }}</span>
+        {% endif %}
+    </td>
+    <td>
+        <div class="progress" style="width: 100px; height: 20px;">
+            <div class="progress-bar 
+                {% if candidate.confidence >= 0.7 %}bg-success
+                {% elif candidate.confidence >= 0.5 %}bg-warning
+                {% else %}bg-danger{% endif %}" 
+                role="progressbar" 
+                style="width: {{ (candidate.confidence * 100)|int }}%"
+                aria-valuenow="{{ candidate.confidence }}" 
+                aria-valuemin="0" 
+                aria-valuemax="1">
+                {{ "%.0f"|format(candidate.confidence * 100) }}%
+            </div>
+        </div>
+    </td>
+    <td><code>{{ candidate.trigger_id }}</code></td>
+    <td>{{ candidate.created_at.strftime('%Y-%m-%d %H:%M') if candidate.created_at else 'N/A' }}</td>
+    <td>
+        {% if candidate.action != "HOLD" %}
+        <form hx-post="/candidates/{{ candidate.id }}/promote"
+              hx-target="#candidate-row-{{ candidate.id }}"
+              hx-swap="outerHTML"
+              class="d-inline">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="bi bi-arrow-up-circle"></i> Promote to Pending Trade
+            </button>
+        </form>
+        {% else %}
+        <span class="text-muted">HOLD - No action</span>
+        {% endif %}
+    </td>
+</tr>
+
+
+
+

@@ -1,0 +1,29 @@
+{% if connection_status.connected %}
+<div class="alert alert-success mb-2">
+    <i class="bi bi-check-circle"></i>
+    Connected to IBKR {{ "Paper" if connection_status.paper_trading else "Live" }} (Port {{ connection_status.port }})
+    {% if connection_status.last_checked %}
+    <br><small class="text-muted">Last checked: {{ connection_status.last_checked[:19]|replace('T', ' ') }}</small>
+    {% endif %}
+</div>
+{% else %}
+<div class="alert alert-warning mb-2">
+    <i class="bi bi-exclamation-triangle"></i>
+    Not connected to IBKR. Start TWS/IB Gateway and click "Connect".
+    {% if connection_status.last_checked %}
+    <br><small class="text-muted">Last checked: {{ connection_status.last_checked[:19]|replace('T', ' ') }}</small>
+    {% endif %}
+    {% if connection_status.reconnect_attempts and connection_status.reconnect_attempts > 0 %}
+    <br><small class="text-muted">Reconnect attempts: {{ connection_status.reconnect_attempts }}</small>
+    {% endif %}
+</div>
+<form method="POST" action="/trades/connect">
+    <button type="submit" class="btn btn-primary">
+        <i class="bi bi-plug"></i> Connect to IBKR
+    </button>
+</form>
+{% endif %}
+
+
+
+

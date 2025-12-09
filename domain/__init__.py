@@ -1,0 +1,5 @@
+"""Domain models for FuggerBot."""
+
+
+
+

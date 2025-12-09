@@ -4,3 +4,16 @@ assets:
     trigger_below: 22
   - ticker: BTC-USD
     drop_pct_trigger: 30
+
+# Execution Configuration
+execution:
+  # Automated execution mode (true = automated with safety constraints, false = requires human approval)
+  automated: true
+  
+  # Safety constraint thresholds
+  safety:
+    drift_halt_threshold: 0.8      # Drift score >= 0.8 → halt trading
+    volatility_flat_threshold: 0.35  # Volatility >= 35% → flatten positions
+    coherence_break_threshold: 0.5   # Coherence <= 0.5 → stop new trades
+    min_frs_score: 0.4              # FRS < 0.4 → wait for confirmation
+    min_meta_reliability: 0.4       # Meta reliability < 0.4 → wait for confirmation

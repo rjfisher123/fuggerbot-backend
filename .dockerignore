@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+.history/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Streamlit (legacy)
+.streamlit/
+streamlit.log
+
+# Data (will be mounted or created at runtime)
+data/*.db
+data/logs/*.log
+data/forecasts/*.json
+data/paper_trades/*.json
+data/trade_*.json
+
+# Assets (keep icon, ignore others)
+assets/*.md
+assets/*.sh
+assets/*.py
+
+# Monitoring
+*.plist
+install_monitor.sh
+uninstall_monitor.sh
+run_monitor.py
+
+# Notebooks
+notebooks/
+
+# Demo scripts
+demo_*.py
+
+
+
+

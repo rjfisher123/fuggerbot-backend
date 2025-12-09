@@ -1,0 +1,340 @@
+{
+  "326567": {
+    "approval_code": "326567",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T22:42:25.920193",
+    "expires_at": "2025-11-20T22:57:25.920208",
+    "status": "approved",
+    "approved_at": "2025-11-20T22:51:08.232405"
+  },
+  "589439": {
+    "approval_code": "589439",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T22:53:13.922838",
+    "expires_at": "2025-11-20T23:08:13.922851",
+    "status": "approved",
+    "approved_at": "2025-11-20T22:54:08.006818"
+  },
+  "206497": {
+    "approval_code": "206497",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T23:04:50.317792",
+    "expires_at": "2025-11-20T23:19:50.317813",
+    "status": "approved",
+    "approved_at": "2025-11-20T23:05:50.696009"
+  },
+  "317012": {
+    "approval_code": "317012",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T23:17:53.481495",
+    "expires_at": "2025-11-20T23:32:53.481509",
+    "status": "approved",
+    "approved_at": "2025-11-20T23:18:08.963156"
+  },
+  "815651": {
+    "approval_code": "815651",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 0
+    },
+    "requested_at": "2025-11-20T23:26:20.262632",
+    "expires_at": "2025-11-20T23:41:20.262641",
+    "status": "pending"
+  },
+  "414733": {
+    "approval_code": "414733",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T23:26:33.917200",
+    "expires_at": "2025-11-20T23:41:33.917207",
+    "status": "approved",
+    "approved_at": "2025-11-20T23:26:45.010455"
+  },
+  "344579": {
+    "approval_code": "344579",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T23:31:00.983283",
+    "expires_at": "2025-11-20T23:46:00.983320",
+    "status": "pending"
+  },
+  "171279": {
+    "approval_code": "171279",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T23:32:56.497232",
+    "expires_at": "2025-11-20T23:47:56.497240",
+    "status": "approved",
+    "approved_at": "2025-11-20T23:33:29.640245"
+  },
+  "989912": {
+    "approval_code": "989912",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 267.0
+    },
+    "requested_at": "2025-11-20T23:38:23.746515",
+    "expires_at": "2025-11-20T23:53:23.746530",
+    "status": "approved",
+    "approved_at": "2025-11-20T23:38:44.003115"
+  },
+  "423445": {
+    "approval_code": "423445",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 271.0
+    },
+    "requested_at": "2025-11-21T08:54:04.739615",
+    "expires_at": "2025-11-21T09:09:04.739627",
+    "status": "approved",
+    "approved_at": "2025-11-21T08:54:13.840420"
+  },
+  "275896": {
+    "approval_code": "275896",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T20:06:35.440399",
+    "expires_at": "2025-11-22T20:21:35.440407",
+    "status": "approved",
+    "approved_at": "2025-11-22T20:07:21.414535"
+  },
+  "140369": {
+    "approval_code": "140369",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T20:23:15.169042",
+    "expires_at": "2025-11-22T20:38:15.169054",
+    "status": "approved",
+    "approved_at": "2025-11-22T20:23:36.185451"
+  },
+  "800637": {
+    "approval_code": "800637",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T20:26:51.493200",
+    "expires_at": "2025-11-22T20:41:51.493208",
+    "status": "approved",
+    "approved_at": "2025-11-22T20:27:13.366565"
+  },
+  "230174": {
+    "request_id": "230174",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T20:51:22.552937",
+    "expires_at": "2025-11-22T21:06:22.552946",
+    "status": "approved",
+    "approved_at": "2025-11-22T20:55:33.609886",
+    "approved_via": "sms_reply"
+  },
+  "125888": {
+    "request_id": "125888",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T20:54:55.590291",
+    "expires_at": "2025-11-22T21:09:55.590304",
+    "status": "approved",
+    "approved_at": "2025-11-22T20:55:25.999306",
+    "approved_via": "sms_reply"
+  },
+  "937401": {
+    "request_id": "937401",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T21:07:20.487855",
+    "expires_at": "2025-11-22T21:22:20.487870",
+    "status": "approved",
+    "approved_at": "2025-11-22T21:08:22.298359",
+    "approved_via": "sms_reply",
+    "approval_sms_sid": "SMca31ff457393bf6e54f41aa4d06fdfd5"
+  },
+  "764133": {
+    "request_id": "764133",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T21:17:28.561035",
+    "expires_at": "2025-11-22T21:32:28.561047",
+    "status": "approved",
+    "approved_at": "2025-11-22T21:23:45.284630",
+    "approved_via": "sms_reply",
+    "approval_sms_sid": "SM980338835cff497b8a91f4096f652616"
+  },
+  "716735": {
+    "request_id": "716735",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T21:33:51.564318",
+    "expires_at": "2025-11-22T21:48:51.564324",
+    "status": "approved",
+    "approved_at": "2025-11-22T21:33:51.801168",
+    "approved_via": "sms_reply",
+    "approval_sms_sid": "SM980338835cff497b8a91f4096f652616"
+  },
+  "440316": {
+    "request_id": "440316",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T21:36:56.999734",
+    "expires_at": "2025-11-22T21:51:56.999741",
+    "status": "approved",
+    "approved_at": "2025-11-22T21:50:44.827130",
+    "approved_via": "sms_reply",
+    "approval_sms_sid": "SMe7703d72bfe7fc8fa3e4d7b9421125ba",
+    "approval_time_diff": 28811.000266
+  },
+  "494171": {
+    "request_id": "494171",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T21:50:10.240818",
+    "expires_at": "2025-11-22T22:05:10.240829",
+    "status": "approved",
+    "approved_at": "2025-11-22T21:50:10.509006",
+    "approved_via": "sms_reply",
+    "approval_sms_sid": "SMe7703d72bfe7fc8fa3e4d7b9421125ba",
+    "approval_time_diff": 28017.759182
+  },
+  "CA385C28": {
+    "trade_id": "CA385C28",
+    "request_id": "CA385C28",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-22T21:57:33.532178",
+    "expires_at": "2025-11-22T22:12:33.532193",
+    "status": "approved",
+    "approved_at": "2025-11-22T21:58:05.742607",
+    "approved_via": "sms_reply",
+    "approval_sms_sid": "SMbb3c090eb8e7b0fa2098975f9be18b54",
+    "approval_time_diff": 28829.467822
+  },
+  "0C9B98EF": {
+    "trade_id": "0C9B98EF",
+    "request_id": "0C9B98EF",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-26T23:14:27.876701",
+    "expires_at": "2025-11-26T23:29:27.876709",
+    "status": "pending"
+  },
+  "A91C7FFB": {
+    "trade_id": "A91C7FFB",
+    "request_id": "A91C7FFB",
+    "trade_details": {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "quantity": 1,
+      "order_type": "LIMIT",
+      "price": 272.0
+    },
+    "requested_at": "2025-11-26T23:32:55.177496",
+    "expires_at": "2025-11-26T23:47:55.177502",
+    "status": "pending"
+  }
+}

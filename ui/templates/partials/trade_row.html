@@ -1,0 +1,46 @@
+{% set safe_row_id = row_id if row_id is defined else "trade-row-" %}
+{% if message %}
+<tr id="{{ safe_row_id }}">
+    <td colspan="8" class="table-success">{{ message }}</td>
+</tr>
+{% else %}
+<tr id="{{ safe_row_id }}">
+    <td><code>{{ trade.trade_id }}</code></td>
+    <td>{{ trade.symbol }}</td>
+    <td>
+        <span class="badge {% if trade.action == 'buy' %}bg-success{% elif trade.action == 'sell' %}bg-danger{% else %}bg-secondary{% endif %}">
+            {{ trade.action }}
+        </span>
+    </td>
+    <td>{{ trade.quantity or "—" }}</td>
+    <td>{{ trade.order_type }}</td>
+    <td>{{ trade.requested_at or "—" }}</td>
+    <td>{{ trade.expires_at or "—" }}</td>
+    <td>
+        <form method="POST" action="/trades/approve"
+              hx-post="/trades/approve"
+              hx-target="#{{ safe_row_id }}"
+              hx-swap="outerHTML"
+              style="display:inline;">
+            <input type="hidden" name="trade_id" value="{{ trade.trade_id }}">
+            <button type="submit" class="btn btn-sm btn-success">
+                <i class="bi bi-check-lg"></i> Approve
+            </button>
+        </form>
+        <form method="POST" action="/trades/reject"
+              hx-post="/trades/reject"
+              hx-target="#{{ safe_row_id }}"
+              hx-swap="outerHTML"
+              style="display:inline;">
+            <input type="hidden" name="trade_id" value="{{ trade.trade_id }}">
+            <button type="submit" class="btn btn-sm btn-danger">
+                <i class="bi bi-x-lg"></i> Reject
+            </button>
+        </form>
+    </td>
+</tr>
+{% endif %}
+
+
+
+

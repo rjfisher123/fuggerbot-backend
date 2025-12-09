@@ -1,0 +1,5 @@
+[
+    {"symbol": "INTC", "type": "LEAP", "strike": 30, "expiry": "2028-01-21", "entry": 22.0, "notes": "18A reset thesis"},
+    {"symbol": "BTC", "type": "crypto", "entry": 52000, "allocation": 0.25},
+    {"symbol": "SGOV", "type": "ETF", "allocation": 0.10}
+  ]

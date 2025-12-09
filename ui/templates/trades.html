@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}Trade Approvals - FuggerBot{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card mb-4">
+            <div class="card-header bg-danger text-white">
+                <h3 class="mb-0"><i class="bi bi-shield-check"></i> Trade Approvals</h3>
+            </div>
+            <div class="card-body">
+                {% if error_message %}
+                <div class="alert alert-danger" role="alert">
+                    {{ error_message }}
+                </div>
+                {% endif %}
+                {% if success_message %}
+                <div class="alert alert-success" role="alert">
+                    {{ success_message }}
+                </div>
+                {% endif %}
+
+                <div class="mb-4">
+                    <h5>IBKR Connection</h5>
+                    <div id="ibkr-status"
+                         hx-get="/trades/status"
+                         hx-trigger="every 5s"
+                         hx-swap="innerHTML">
+                        {% include "partials/ibkr_status.html" %}
+                    </div>
+                </div>
+
+                <h5>Pending Approvals ({{ pending_trades|length }})</h5>
+                {% if pending_trades %}
+                <div class="table-responsive mb-4">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Trade ID</th>
+                                <th>Symbol</th>
+                                <th>Action</th>
+                                <th>Quantity</th>
+                                <th>Order Type</th>
+                                <th>Requested</th>
+                                <th>Expires</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trade in pending_trades %}
+                                {% set row_id = "trade-row-" ~ (trade.trade_id|string)|replace(' ', '_')|replace('/', '_') %}
+                                {% include "partials/trade_row.html" %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">No pending trades.</div>
+                {% endif %}
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-key"></i> Manual Approval Code</h6>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="/trades/approve" class="row g-3 align-items-center">
+                            <div class="col-md-6">
+                                <label for="approval_code" class="form-label">Approval Code</label>
+                                <input type="text" class="form-control" id="approval_code" name="approval_code" placeholder="Enter 6-digit code">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">&nbsp;</label>
+                                <div>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-send-check"></i> Approve with Code
+                                    </button>
+                                    <button type="submit" name="trade_id" value="" class="btn btn-secondary">
+                                        <i class="bi bi-phone"></i> Check SMS Approvals
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <h5>Recent Trade History</h5>
+                {% if trade_history %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Action</th>
+                                <th>Quantity</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trade in trade_history %}
+                            <tr>
+                                <td>{{ trade.symbol or "N/A" }}</td>
+                                <td>{{ trade.action }}</td>
+                                <td>{{ trade.quantity or "—" }}</td>
+                                <td><span class="badge {% if trade.success or trade.status in ['Filled','Submitted','PendingSubmit'] %}bg-success{% else %}bg-secondary{% endif %}">{{ trade.status or "N/A" }}</span></td>
+                                <td>{{ trade.message or trade.note or "—" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">No trade history available.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Live Price Charts -->
+        {% if symbols %}
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Live Price Charts</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for symbol in symbols[:6] %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">{{ symbol }} - Live Price</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="price-chart-{{ symbol }}" style="height: 300px;"></div>
+                                <div class="mt-2">
+                                    <strong>Current:</strong> <span id="price-{{ symbol }}" class="text-primary">Loading...</span>
+                                    <small class="text-muted ms-2" id="price-time-{{ symbol }}"></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Trade Timeline Chart -->
+        {% if trade_history %}
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-timeline"></i> Trade Execution Timeline</h5>
+            </div>
+            <div class="card-body">
+                <div id="trade-timeline-chart" style="height: 400px;"></div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // Load price charts for symbols
+    {% if symbols %}
+    const symbols = {{ symbols|tojson }};
+    
+    async function loadPriceChart(symbol) {
+        try {
+            const response = await fetch(`/api/market/chart/${symbol}?period=1d&interval=5m`);
+            const data = await response.json();
+            
+            if (data && data.data) {
+                const chartData = [{
+                    x: data.data.timestamps,
+                    y: data.data.close,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: symbol,
+                    line: { color: '#1f77b4' }
+                }];
+                
+                const layout = {
+                    title: `${symbol} - Last 24 Hours`,
+                    xaxis: { title: 'Time' },
+                    yaxis: { title: 'Price ($)' },
+                    height: 300,
+                    margin: { l: 50, r: 20, t: 40, b: 40 }
+                };
+                
+                Plotly.newPlot(`price-chart-${symbol}`, chartData, layout);
+                
+                // Update current price
+                if (data.current_price) {
+                    document.getElementById(`price-${symbol}`).textContent = `$${data.current_price.toFixed(2)}`;
+                    document.getElementById(`price-time-${symbol}`).textContent = new Date().toLocaleTimeString();
+                }
+            }
+        } catch (error) {
+            console.error(`Error loading chart for ${symbol}:`, error);
+        }
+    }
+    
+    // Load all charts
+    symbols.forEach(symbol => {
+        loadPriceChart(symbol);
+        // Refresh every 30 seconds
+        setInterval(() => loadPriceChart(symbol), 30000);
+    });
+    {% endif %}
+    
+    // Load trade timeline
+    {% if trade_history %}
+    async function loadTradeTimeline() {
+        try {
+            const response = await fetch('/api/market/trade-timeline?limit=50');
+            const data = await response.json();
+            
+            if (data && data.trades && data.trades.length > 0) {
+                // Group trades by symbol
+                const tradesBySymbol = {};
+                data.trades.forEach(trade => {
+                    if (!tradesBySymbol[trade.symbol]) {
+                        tradesBySymbol[trade.symbol] = [];
+                    }
+                    tradesBySymbol[trade.symbol].push(trade);
+                });
+                
+                const chartData = [];
+                const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b'];
+                let colorIndex = 0;
+                
+                Object.keys(tradesBySymbol).forEach(symbol => {
+                    const trades = tradesBySymbol[symbol];
+                    const buyTrades = trades.filter(t => t.action === 'BUY').map(t => ({
+                        x: t.timestamp,
+                        y: t.price,
+                        qty: t.quantity
+                    }));
+                    const sellTrades = trades.filter(t => t.action === 'SELL').map(t => ({
+                        x: t.timestamp,
+                        y: t.price,
+                        qty: t.quantity
+                    }));
+                    
+                    if (buyTrades.length > 0) {
+                        chartData.push({
+                            x: buyTrades.map(t => t.x),
+                            y: buyTrades.map(t => t.y),
+                            type: 'scatter',
+                            mode: 'markers',
+                            name: `${symbol} BUY`,
+                            marker: { 
+                                color: colors[colorIndex % colors.length],
+                                size: buyTrades.map(t => Math.max(5, t.qty / 10)),
+                                symbol: 'triangle-up'
+                            }
+                        });
+                    }
+                    
+                    if (sellTrades.length > 0) {
+                        chartData.push({
+                            x: sellTrades.map(t => t.x),
+                            y: sellTrades.map(t => t.y),
+                            type: 'scatter',
+                            mode: 'markers',
+                            name: `${symbol} SELL`,
+                            marker: { 
+                                color: colors[colorIndex % colors.length],
+                                size: sellTrades.map(t => Math.max(5, t.qty / 10)),
+                                symbol: 'triangle-down'
+                            }
+                        });
+                    }
+                    
+                    colorIndex++;
+                });
+                
+                const layout = {
+                    title: 'Trade Execution Timeline',
+                    xaxis: { title: 'Time' },
+                    yaxis: { title: 'Price ($)' },
+                    height: 400,
+                    hovermode: 'closest'
+                };
+                
+                Plotly.newPlot('trade-timeline-chart', chartData, layout);
+            }
+        } catch (error) {
+            console.error('Error loading trade timeline:', error);
+        }
+    }
+    
+    loadTradeTimeline();
+    // Refresh every 60 seconds
+    setInterval(loadTradeTimeline, 60000);
+    {% endif %}
+</script>
+{% endblock %}
+
