@@ -63,6 +63,23 @@ GLOBAL_UNIVERSE: Dict[str, List[str]] = {
         "GBPUSD=X",   # GBP/USD
         "AUDUSD=X",   # AUD/USD
     ],
+    "STOCKS": [
+        "NVDA",       # NVIDIA
+        "AAPL",       # Apple
+        "MSFT",       # Microsoft
+        "GOOGL",      # Alphabet
+        "AMZN",       # Amazon
+        "META",       # Meta
+        "TSLA",       # Tesla
+        "JPM",        # JPMorgan Chase
+        "V",          # Visa
+        "WMT",        # Walmart
+        "XOM",        # Exxon Mobil
+        "JNJ",        # Johnson & Johnson
+        "PG",         # Procter & Gamble
+        "BAC",        # Bank of America
+        "MA",         # Mastercard
+    ],
     "CRYPTO": [
         "BTC-USD",    # Bitcoin
         "ETH-USD",    # Ethereum
