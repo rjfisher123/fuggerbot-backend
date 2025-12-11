@@ -1,5 +1,6 @@
 """Interactive Brokers (IBKR) trading module for FuggerBot."""
 import os
+import sys
 import json
 import time
 import random
@@ -7,6 +8,10 @@ from typing import Optional, Dict, List, TYPE_CHECKING
 from pathlib import Path
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+# Add parent directory to path for imports when running as script
+if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Lazy import for ib_insync to avoid event loop issues in Streamlit
 IBKR_AVAILABLE = False
@@ -48,8 +53,8 @@ def _import_ib_insync():
         _ib_insync_imported = True
         return False
 
-from .logger import logger
-from .sms_notifier import get_sms_notifier
+from core.logger import logger
+from core.sms_notifier import get_sms_notifier
 
 # Load environment variables
 load_dotenv()

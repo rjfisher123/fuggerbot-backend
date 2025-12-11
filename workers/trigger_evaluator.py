@@ -20,7 +20,7 @@ from persistence.db import SessionLocal
 from persistence.models_triggers import TriggerEvent
 from persistence.repositories_triggers import TriggerResultRepository, TradeCandidateRepository
 from core.logger import logger
-from core.logging import log_trigger_fire
+from core.logger import log_trigger_fire
 from core.alert_router import get_alert_router
 
 

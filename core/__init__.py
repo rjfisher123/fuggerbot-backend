@@ -1,7 +1,7 @@
 """FuggerBot core modules."""
 from .sms_notifier import send_sms, get_sms_notifier, SMSNotifier
 from .alert_router import send_alert, get_alert_router, AlertRouter
-from .logger import logger, setup_logger
+from .logger import logger
 
 # Gemini AI (optional - requires google-generativeai)
 try:
@@ -29,7 +29,6 @@ __all__ = [
     "get_alert_router",
     "AlertRouter",
     "logger",
-    "setup_logger",
 ]
 
 if GEMINI_AVAILABLE:

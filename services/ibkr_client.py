@@ -10,7 +10,7 @@ import os
 
 from core.ibkr_trader import get_live_trading_trader, get_paper_trading_trader, IBKRTrader
 from core.logger import logger
-from core.logging import log_ibkr_event
+from core.logger import log_ibkr_event
 
 
 class IBKRClient:

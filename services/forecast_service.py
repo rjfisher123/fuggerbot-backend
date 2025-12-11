@@ -24,7 +24,7 @@ from models.cross_asset_coherence import CrossAssetCoherence
 from models.tsfm.inference import ChronosInferenceEngine
 from domain.forecast import Forecast
 from core.logger import logger
-from core.logging import log_forecast_creation
+from core.logger import log_forecast_creation
 
 
 class ForecastService:

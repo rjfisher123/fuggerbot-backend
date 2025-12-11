@@ -20,7 +20,7 @@ from services.forecast_service import get_forecast
 from persistence.db import SessionLocal
 from persistence.repositories_backtest import BacktestRepository
 from core.logger import logger
-from core.logging import log_backtest_result
+from core.logger import log_backtest_result
 
 
 class BacktestService:

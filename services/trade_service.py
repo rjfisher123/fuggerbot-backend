@@ -14,7 +14,7 @@ from persistence.db import SessionLocal
 from persistence.repositories_trades import TradeRequestRepository, TradeExecutionRepository
 from persistence.models_trades import TradeRequest
 from core.logger import logger
-from core.logging import log_trade_event
+from core.logger import log_trade_event
 
 
 class TradeService:
