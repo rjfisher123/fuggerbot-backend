@@ -222,6 +222,80 @@ class WarGamesRunner:
         
         return confidence, target_price
     
+    def _calculate_kelly_position_size(
+        self,
+        balance: float,
+        trades: List[Trade],
+        params: TradingParams,
+        min_trades_for_kelly: int = 5,
+        fractional_kelly: float = 0.25
+    ) -> float:
+        """
+        Calculate position size using Kelly Criterion.
+        
+        Formula: f = (bp - q) / b
+        Where:
+            f = fraction of capital to risk
+            b = odds received on the bet (avg_win / avg_loss)
+            p = probability of winning (win_rate)
+            q = probability of losing (1 - p)
+        
+        Simplified for trading: f = (win_rate * avg_win - loss_rate * avg_loss) / avg_win
+        
+        Args:
+            balance: Current account balance
+            trades: List of historical trades
+            params: Trading parameters
+            min_trades_for_kelly: Minimum trades needed to use Kelly
+            fractional_kelly: Fraction of Kelly to use (0.25 = quarter Kelly for safety)
+            
+        Returns:
+            Position size in dollars
+        """
+        # If not enough trade history, use conservative fixed sizing
+        if len(trades) < min_trades_for_kelly:
+            # Bootstrap with ultra-conservative 5% fixed position size
+            # This prevents catastrophic losses while Kelly learns
+            return balance * 0.05
+        
+        # Calculate win rate and average returns from recent trades
+        recent_trades = trades[-20:] if len(trades) > 20 else trades  # Last 20 trades or all
+        
+        winning_trades = [t for t in recent_trades if t.pnl > 0]
+        losing_trades = [t for t in recent_trades if t.pnl < 0]
+        
+        if not winning_trades or not losing_trades:
+            # If all wins or all losses, use conservative sizing
+            return balance * 0.05
+        
+        win_rate = len(winning_trades) / len(recent_trades)
+        loss_rate = 1 - win_rate
+        
+        # Calculate average win and loss as percentages
+        avg_win_pct = np.mean([abs(t.pnl_pct) for t in winning_trades])
+        avg_loss_pct = np.mean([abs(t.pnl_pct) for t in losing_trades])
+        
+        # Kelly Criterion: f = (win_rate * avg_win - loss_rate * avg_loss) / avg_win
+        kelly_fraction = (win_rate * avg_win_pct - loss_rate * avg_loss_pct) / avg_win_pct
+        
+        # Apply fractional Kelly for safety (typically 0.25 to 0.5)
+        kelly_fraction = kelly_fraction * fractional_kelly
+        
+        # Ensure Kelly is within reasonable bounds
+        kelly_fraction = max(0.01, min(kelly_fraction, 0.15))  # Between 1% and 15%
+        
+        # Calculate position size
+        position_size = balance * kelly_fraction
+        
+        # Cap at parameter max (defensive layer)
+        max_position = balance * min(params.max_position_size, 0.20)
+        position_size = min(position_size, max_position)
+        
+        # Keep 5% cash buffer
+        position_size = min(position_size, balance * 0.95)
+        
+        return position_size
+    
     def run_campaign(
         self,
         campaign_name: str,
@@ -367,20 +441,15 @@ class WarGamesRunner:
                 )
                 
                 if should_enter:
-                    # Volatility-Adjusted Position Sizing (Operation Clean Slate v2.0)
-                    # Target: Risk 2% of account per trade
-                    target_risk = balance * 0.02
-                    
-                    # Calculate position size based on stop loss distance
-                    stop_loss_distance = params.stop_loss
-                    position_size_from_risk = target_risk / stop_loss_distance
-                    
-                    # Cap at maximum position size (20% of account max)
-                    max_position_value = balance * min(params.max_position_size, 0.20)
-                    position_size = min(position_size_from_risk, max_position_value)
-                    
-                    # Ensure we have enough balance
-                    position_size = min(position_size, balance * 0.95)  # Keep 5% cash buffer
+                    # Kelly Criterion Position Sizing (Operation Clean Slate v2.1)
+                    # Uses historical trade performance to optimize position size
+                    position_size = self._calculate_kelly_position_size(
+                        balance=balance,
+                        trades=trades,
+                        params=params,
+                        min_trades_for_kelly=5,
+                        fractional_kelly=0.25  # Quarter Kelly for safety
+                    )
                     
                     shares = position_size / current_price
                     
