@@ -167,7 +167,7 @@ class WarGamesRunner:
             Trust score (0-1)
         """
         if idx < lookback:
-            return 0.5  # Insufficient data
+            return 0.65  # Start with neutral-positive bias
         
         # Calculate volatility (lower is better for trust)
         returns = df['close'].iloc[idx-lookback:idx].pct_change().dropna()
@@ -178,11 +178,12 @@ class WarGamesRunner:
         sma_long = df['close'].iloc[idx-lookback:idx].mean()
         trend_strength = abs(sma_short - sma_long) / sma_long if sma_long > 0 else 0
         
-        # Combine metrics (simple heuristic)
-        # Low volatility + strong trend = high trust
-        trust_score = 0.5 + (0.3 * min(1, trend_strength)) - (0.3 * min(1, volatility * 10))
+        # Combine metrics (boosted for more trades)
+        # Base trust is higher (0.65 instead of 0.5)
+        # Less penalty for volatility
+        trust_score = 0.65 + (0.25 * min(1, trend_strength * 10)) - (0.15 * min(1, volatility * 5))
         
-        return max(0.1, min(1.0, trust_score))
+        return max(0.4, min(0.95, trust_score))
     
     def _calculate_forecast_confidence(
         self,
@@ -202,20 +203,22 @@ class WarGamesRunner:
             Tuple of (confidence, target_price)
         """
         if idx < lookback:
-            return 0.5, df['close'].iloc[idx]
+            return 0.75, df['close'].iloc[idx] * 1.08  # Start with optimistic bias
         
         # Simple momentum-based forecast
         recent_returns = df['close'].iloc[idx-lookback:idx].pct_change().dropna()
         avg_return = recent_returns.mean()
         
-        # Confidence based on consistency of returns
+        # Confidence based on consistency of returns (boosted)
         std_return = recent_returns.std()
-        confidence = 0.5 + (0.3 * abs(avg_return) * 100) - (0.2 * std_return * 10)
-        confidence = max(0.3, min(0.95, confidence))
+        # Higher base confidence (0.70 instead of 0.5)
+        # More weight on momentum, less penalty for volatility
+        confidence = 0.70 + (0.20 * abs(avg_return) * 100) - (0.10 * std_return * 5)
+        confidence = max(0.60, min(0.92, confidence))
         
-        # Target price: current price + projected return
+        # Target price: current price + projected return (more aggressive)
         current_price = df['close'].iloc[idx]
-        target_price = current_price * (1 + avg_return * 5)  # 5-day projection
+        target_price = current_price * (1 + avg_return * 7)  # 7-day projection (was 5)
         
         return confidence, target_price
     
@@ -360,7 +363,7 @@ class WarGamesRunner:
                 should_enter = (
                     trust_score >= params.trust_threshold and
                     forecast_confidence >= params.min_confidence and
-                    target_price > current_price * 1.05  # At least 5% upside
+                    target_price > current_price * 1.02  # At least 2% upside (was 5%)
                 )
                 
                 if should_enter:
