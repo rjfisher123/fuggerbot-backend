@@ -206,23 +206,23 @@ if view_mode == "War Games Results":
     leaderboard['scenario'] = leaderboard['campaign_name'].str.split(' - ').str[0]
     leaderboard['param_set'] = leaderboard['campaign_name'].str.split(' - ').str[-1]
     
-    # Reorder columns
-    leaderboard = leaderboard[[
+    # Highlight best performer for each scenario (before reordering)
+    best_by_scenario = leaderboard.loc[
+        leaderboard.groupby('scenario')['total_return_pct'].idxmax()
+    ]['campaign_name'].tolist()
+    
+    # Reorder columns for display (keep campaign_name for reference)
+    display_cols = [
         'scenario', 'symbol', 'param_set', 'total_return_pct', 
         'win_rate', 'max_drawdown_pct', 'sharpe_ratio', 'total_trades'
-    ]]
+    ]
     
     # Format for display
-    leaderboard_display = leaderboard.copy()
+    leaderboard_display = leaderboard[display_cols].copy()
     leaderboard_display['total_return_pct'] = leaderboard_display['total_return_pct'].apply(lambda x: f"{x:.1f}%")
     leaderboard_display['win_rate'] = leaderboard_display['win_rate'].apply(lambda x: f"{x:.1%}")
     leaderboard_display['max_drawdown_pct'] = leaderboard_display['max_drawdown_pct'].apply(lambda x: f"{x:.1f}%")
     leaderboard_display['sharpe_ratio'] = leaderboard_display['sharpe_ratio'].apply(lambda x: f"{x:.2f}")
-    
-    # Highlight best performer for each scenario
-    best_by_scenario = leaderboard.loc[
-        leaderboard.groupby('scenario')['total_return_pct'].idxmax()
-    ]['campaign_name'].tolist()
     
     st.dataframe(
         leaderboard_display,
