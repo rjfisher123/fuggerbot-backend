@@ -225,70 +225,77 @@ class WarGamesRunner:
     def _calculate_kelly_position_size(
         self,
         balance: float,
-        trades: List[Trade],
+        trust_score: float,
         params: TradingParams,
-        min_trades_for_kelly: int = 5,
         fractional_kelly: float = 0.25
     ) -> float:
         """
-        Calculate position size using Kelly Criterion.
+        Calculate position size using Conservative Kelly Criterion.
         
-        Formula: f = (bp - q) / b
+        Formula: kelly_pct = (p * b - q) / b
         Where:
-            f = fraction of capital to risk
-            b = odds received on the bet (avg_win / avg_loss)
-            p = probability of winning (win_rate)
-            q = probability of losing (1 - p)
+            p = win_probability (trust_score, but calibrated conservatively)
+            q = loss_probability (1 - p)
+            b = win_loss_ratio (take_profit / stop_loss)
         
-        Simplified for trading: f = (win_rate * avg_win - loss_rate * avg_loss) / avg_win
+        Key Safety Features:
+        1. Cap trust_score at 0.65 (assume no model is >65% accurate)
+        2. Use fractional Kelly (0.25) for extreme safety
+        3. Hard cap at 10% per position (not 20%)
         
         Args:
             balance: Current account balance
-            trades: List of historical trades
-            params: Trading parameters
-            min_trades_for_kelly: Minimum trades needed to use Kelly
-            fractional_kelly: Fraction of Kelly to use (0.25 = quarter Kelly for safety)
+            trust_score: Model confidence (0-1), calibrated to realistic win rate
+            params: Trading parameters (contains stop_loss and take_profit)
+            fractional_kelly: Fraction of Kelly to use (0.25 = quarter Kelly)
             
         Returns:
             Position size in dollars
+            
+        Example:
+            trust_score = 0.85 → capped at 0.65
+            win_loss_ratio = 0.15 / 0.05 = 3.0
+            
+            kelly_pct = (0.65 * 3.0 - 0.35) / 3.0
+                      = (1.95 - 0.35) / 3.0
+                      = 1.60 / 3.0
+                      = 0.533 (53% of capital!)
+            
+            With fractional_kelly = 0.25:
+            position_size = 0.533 * 0.25 = 0.133 (13.3%)
+            
+            Capped at 10% maximum:
+            final_position_size = 0.10 (10%)
         """
-        # If not enough trade history, use conservative fixed sizing
-        if len(trades) < min_trades_for_kelly:
-            # Bootstrap with ultra-conservative 5% fixed position size
-            # This prevents catastrophic losses while Kelly learns
-            return balance * 0.05
+        # CRITICAL: Cap trust score at 0.65 max
+        # Models are overconfident - real win rates are ~50%
+        calibrated_trust = min(trust_score, 0.65)
         
-        # Calculate win rate and average returns from recent trades
-        recent_trades = trades[-20:] if len(trades) > 20 else trades  # Last 20 trades or all
+        # Win probability = calibrated trust (conservative)
+        win_probability = calibrated_trust
+        loss_probability = 1 - win_probability
         
-        winning_trades = [t for t in recent_trades if t.pnl > 0]
-        losing_trades = [t for t in recent_trades if t.pnl < 0]
+        # Win/Loss ratio from risk parameters
+        win_loss_ratio = params.take_profit / params.stop_loss
         
-        if not winning_trades or not losing_trades:
-            # If all wins or all losses, use conservative sizing
-            return balance * 0.05
+        # Kelly Criterion formula
+        kelly_pct = (win_probability * win_loss_ratio - loss_probability) / win_loss_ratio
         
-        win_rate = len(winning_trades) / len(recent_trades)
-        loss_rate = 1 - win_rate
+        # Handle negative Kelly (no edge, don't trade)
+        if kelly_pct <= 0:
+            return balance * 0.02  # Minimum 2% position
         
-        # Calculate average win and loss as percentages
-        avg_win_pct = np.mean([abs(t.pnl_pct) for t in winning_trades])
-        avg_loss_pct = np.mean([abs(t.pnl_pct) for t in losing_trades])
+        # Apply fractional Kelly for safety
+        kelly_pct = kelly_pct * fractional_kelly
         
-        # Kelly Criterion: f = (win_rate * avg_win - loss_rate * avg_loss) / avg_win
-        kelly_fraction = (win_rate * avg_win_pct - loss_rate * avg_loss_pct) / avg_win_pct
-        
-        # Apply fractional Kelly for safety (typically 0.25 to 0.5)
-        kelly_fraction = kelly_fraction * fractional_kelly
-        
-        # Ensure Kelly is within reasonable bounds
-        kelly_fraction = max(0.01, min(kelly_fraction, 0.15))  # Between 1% and 15%
+        # Ensure within VERY conservative bounds
+        kelly_pct = max(0.02, min(kelly_pct, 0.10))  # Between 2% and 10% (not 20%!)
         
         # Calculate position size
-        position_size = balance * kelly_fraction
+        position_size = balance * kelly_pct
         
-        # Cap at parameter max (defensive layer)
-        max_position = balance * min(params.max_position_size, 0.20)
+        # Cap at 10% maximum (MUCH safer than 20%)
+        max_position = balance * 0.10
         position_size = min(position_size, max_position)
         
         # Keep 5% cash buffer
@@ -441,13 +448,13 @@ class WarGamesRunner:
                 )
                 
                 if should_enter:
-                    # Kelly Criterion Position Sizing (Operation Clean Slate v2.1)
-                    # Uses historical trade performance to optimize position size
+                    # Forward-Looking Kelly Criterion (v2.2)
+                    # Uses model confidence (trust_score) and risk/reward ratio
+                    # Formula: kelly = (p*b - q) / b, where p=trust, b=TP/SL ratio
                     position_size = self._calculate_kelly_position_size(
                         balance=balance,
-                        trades=trades,
+                        trust_score=trust_score,
                         params=params,
-                        min_trades_for_kelly=5,
                         fractional_kelly=0.25  # Quarter Kelly for safety
                     )
                     
