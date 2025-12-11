@@ -9,6 +9,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 from config.settings import get_settings
+from config import AdaptiveParamLoader
 from models.tsfm.inference import ChronosInferenceEngine
 from models.tsfm.schemas import ForecastInput
 from models.trust.filter import TrustFilter
@@ -17,6 +18,14 @@ from reasoning.memory import TradeMemory
 from reasoning.schemas import TradeContext, ReasoningDecision, DeepSeekResponse
 from execution.ibkr import IBKRBridge
 from context.tracker import RegimeTracker
+
+# Level 2 Perception Agents
+from agents.trm.news_digest_agent import NewsDigestAgent, NewsDigest
+from agents.trm.memory_summarizer import MemorySummarizer, MemoryNarrative
+from services.news_fetcher import NewsFetcher
+
+# Level 4 Policy Agent
+from agents.trm.risk_policy_agent import RiskPolicyAgent, TRMInput, FinalVerdict
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -74,9 +83,18 @@ class TradeOrchestrator:
             model=self.settings.deepseek_model
         )
         self.memory = TradeMemory()
+        self.param_loader = AdaptiveParamLoader()
         
         # Initialize Regime Tracker for Macro Context
         self.regime_tracker = RegimeTracker()
+        
+        # Initialize Level 2 Perception Agents
+        self.news_fetcher = NewsFetcher()
+        self.news_digest = NewsDigestAgent()
+        self.memory_summarizer = MemorySummarizer()
+        
+        # Initialize Level 4 Policy Agent
+        self.risk_policy = RiskPolicyAgent()
         
         # Initialize Execution Bridge
         # We default to Paper Trading port (7497). Change to 7496 for Live.
@@ -179,6 +197,15 @@ class TradeOrchestrator:
         logger.info("="*60)
         
         start_time = time.time()
+
+        # Load dynamic parameters for this symbol
+        params = self.param_loader.get_params(symbol)
+        trust_threshold = float(params.get("trust_threshold", 0.65))
+        min_confidence = float(params.get("min_confidence", 0.75))
+        logger.info(
+            f"📐 Using dynamic params for {symbol}: "
+            f"trust_threshold={trust_threshold:.2f}, min_confidence={min_confidence:.2f}"
+        )
         
         # --- STAGE 0: DATA ---
         df = self.fetch_data(symbol)
@@ -225,39 +252,110 @@ class TradeOrchestrator:
                 historical_volatility=historical_vol
             )
             
-            if not trust_result.is_trusted:
-                logger.info(f"🔴 [STAGE 2] REJECTED by Trust Filter ({trust_result.metrics.overall_trust_score:.3f})")
-                return None
+            trust_score = trust_result.metrics.overall_trust_score
+            if not trust_result.is_trusted or trust_score < trust_threshold:
+                logger.info(
+                    f"🔴 [STAGE 2] REJECTED by Trust Filter "
+                    f"(score={trust_score:.3f}, threshold={trust_threshold:.2f})"
+                )
+                return TradeDecision(
+                    symbol=symbol,
+                    decision="REJECT",
+                    stage="trust",
+                    reason=f"Trust score {trust_score:.3f} below threshold {trust_threshold:.2f}",
+                    forecast_output=forecast_output,
+                    trust_evaluation=trust_result,
+                )
             
-            logger.info(f"✅ [STAGE 2] Trust Score: {trust_result.metrics.overall_trust_score:.3f}")
+            logger.info(f"✅ [STAGE 2] Trust Score: {trust_score:.3f} (threshold {trust_threshold:.2f})")
         except Exception as e:
             logger.error(f"❌ [STAGE 2] Trust evaluation failed: {e}")
             return None
 
-        # --- STAGE 3: DEEPSEEK REASONING ---
-        logger.info(f"[STAGE 3] 🤖 Calling LLM...")
+        # --- LEVEL 2: PERCEPTION ---
+        logger.info(f"[LEVEL 2] 👁️ Perception Layer: News + Memory Analysis...")
+        
+        # 1. News Perception
+        try:
+            raw_news = self.news_fetcher.get_context(symbol)  # Returns formatted string
+            news_digest = self.news_digest.digest(raw_news, symbol)  # Returns NewsDigest object
+            logger.info(
+                f"✅ [PERCEPTION] News: {news_digest.sentiment.value} "
+                f"(Impact: {news_digest.impact_level.value}, Headlines: {news_digest.headline_count})"
+            )
+        except Exception as e:
+            logger.error(f"❌ [PERCEPTION] News digest failed: {e}")
+            # Fallback to neutral news digest
+            from agents.trm.news_digest_agent import NewsImpact, NewsSentiment
+            news_digest = NewsDigest(
+                impact_level=NewsImpact.LOW,
+                sentiment=NewsSentiment.NEUTRAL,
+                summary="News fetch error - proceeding with neutral assumption",
+                headline_count=0
+            )
+        
+        # 2. Memory Perception (Enhanced with Global Data Lake)
+        current_regime = self.regime_tracker.get_current_regime()
+        try:
+            # Get MemoryNarrative object for metrics
+            memory_narrative = self.memory_summarizer.summarize(symbol, current_regime.id)
+            
+            # Get unified context (Trade History + Global Market Context)
+            unified_memory_context = self.memory_summarizer.get_unified_context(
+                symbol, 
+                current_regime.id, 
+                include_market=True
+            )
+            
+            logger.info(
+                f"✅ [PERCEPTION] Memory: Win Rate={memory_narrative.regime_win_rate:.1%}, "
+                f"Hallucination Rate={memory_narrative.hallucination_rate:.1%}"
+            )
+            
+            # Log market context from Global Data Lake
+            market_context_only = self.memory_summarizer.get_market_context(symbol, days=30)
+            logger.info(f"📊 [PERCEPTION] Global Market Context:\n{market_context_only}")
+            
+        except Exception as e:
+            logger.error(f"❌ [PERCEPTION] Memory summarizer failed: {e}")
+            # Fallback to neutral memory narrative
+            memory_narrative = MemoryNarrative(
+                regime_win_rate=0.5,
+                total_trades_in_regime=0,
+                primary_failure_mode="Unknown",
+                hallucination_rate=0.0,
+                confidence_calibration="N/A",
+                narrative="Memory fetch error - no historical context available"
+            )
+            unified_memory_context = memory_narrative.narrative
+        
+        # --- LEVEL 3: COGNITION (LLM) ---
+        logger.info(f"[LEVEL 3] 🤖 Cognition Layer: LLM Reasoning...")
         
         # 1. Get Current Macro Regime
-        regime = self.regime_tracker.get_current_regime()
+        regime = current_regime
         logger.info(f"🌍 Market Regime: {regime.id} ({regime.name})")
         
-        # 2. Fetch Precedents
+        # 2. Fetch Precedents (Learning Book)
         precedent_summary = self.find_precedents(symbol, current_vol, trust_result.metrics.overall_trust_score)
         
-        # 3. Build Context with Macro Regime
+        # 3. Build Enriched Context with Perception Layer Outputs
         memory_str = self.memory.get_summary(symbol)
         
-        # Format market behavior list as bullet points
-        behavior_text = "\n".join([f"- {behavior}" for behavior in regime.market_behavior]) if regime.market_behavior else "No specific behaviors documented."
+        # Use RegimeTracker's get_prompt_context() method for formatted context
+        macro_context = self.regime_tracker.get_prompt_context()
         
-        macro_context = (
-            f"MACRO CONTEXT ({regime.name}):\n"
-            f"{regime.description}\n\n"
-            f"Key Behaviors:\n{behavior_text}\n\n"
-            f"Guidance: {regime.embedding_hint}"
+        # Inject News and Memory Narratives into Context (with Global Data Lake insights)
+        full_memory_context = (
+            f"{memory_str}\n\n"
+            f"{precedent_summary}\n\n"
+            f"MACRO CONTEXT:\n{macro_context}\n\n"
+            f"--- PERCEPTION LAYER INSIGHTS ---\n"
+            f"NEWS SENTIMENT: {news_digest.sentiment.value} (Impact: {news_digest.impact_level.value})\n"
+            f"NEWS SUMMARY: {news_digest.summary}\n\n"
+            f"--- UNIFIED MEMORY CONTEXT (Trade History + Global Market) ---\n"
+            f"{unified_memory_context}"
         )
-        
-        full_memory_context = f"{memory_str}\n\n{precedent_summary}\n\n{macro_context}"
         
         # Calculate forecast confidence from forecast output
         forecast_confidence = 1.0 - (
@@ -287,15 +385,110 @@ class TradeOrchestrator:
             logger.error("❌ [STAGE 3] LLM returned None")
             return None
 
-        logger.info(f"✅ [STAGE 3] Decision: {llm_decision.decision.value} (Conf: {llm_decision.confidence:.2f})")
+        # Enforce minimum confidence dynamically
+        if (
+            llm_decision.decision == ReasoningDecision.APPROVE
+            and llm_decision.confidence < min_confidence
+        ):
+            logger.info(
+                f"🔧 [STAGE 3] Downgrading decision to WAIT: "
+                f"confidence {llm_decision.confidence:.2f} < min_confidence {min_confidence:.2f}"
+            )
+            llm_decision.decision = ReasoningDecision.WAIT
+            llm_decision.rationale = (
+                f"Confidence {llm_decision.confidence:.2f} below threshold {min_confidence:.2f}"
+            )
 
-        # --- EXECUTION ---
-        trade_id = self.memory.add_trade(
-            context=context,
-            response=llm_decision
+        logger.info(
+            f"✅ [LEVEL 3] Decision: {llm_decision.decision.value} "
+            f"(Conf: {llm_decision.confidence:.2f}, min_conf={min_confidence:.2f})"
         )
 
-        if llm_decision.decision == ReasoningDecision.APPROVE:
+        # --- LEVEL 4: POLICY (TRM) ---
+        logger.info(f"[LEVEL 4] 🛡️ Policy Layer: Risk Policy Evaluation...")
+        
+        # Get v1.5 metrics from LLM response
+        proposer_conf = getattr(llm_decision, 'proposer_confidence', None)
+        critique_flaws = getattr(llm_decision, 'critique_flaws_count', None)
+        
+        # Construct TRM Input
+        try:
+            trm_input = TRMInput(
+                symbol=symbol,
+                forecast_confidence=forecast_confidence,
+                trust_score=trust_result.metrics.overall_trust_score,
+                news_digest=news_digest,
+                memory_narrative=memory_narrative,
+                llm_decision=llm_decision.decision,
+                llm_confidence=llm_decision.confidence,
+                critique_flaws_count=critique_flaws
+            )
+            
+            # Call Risk Policy Agent
+            final_verdict = self.risk_policy.decide(trm_input)
+            
+            logger.info(
+                f"✅ [LEVEL 4] Final Verdict: {final_verdict.decision.value} "
+                f"(Conf: {final_verdict.original_confidence:.2f} → {final_verdict.confidence:.2f}, "
+                f"Veto: {final_verdict.veto_applied})"
+            )
+            logger.info(f"[LEVEL 4] {final_verdict.override_reason}")
+            
+        except Exception as e:
+            logger.error(f"❌ [LEVEL 4] Risk policy failed: {e}")
+            # Fallback: use LLM decision without policy enforcement
+            final_verdict = FinalVerdict(
+                decision=llm_decision.decision,
+                confidence=llm_decision.confidence,
+                original_confidence=llm_decision.confidence,
+                confidence_adjustment=0.0,
+                veto_applied=False,
+                veto_reason="NO_VETO",
+                override_reason="Policy evaluation error - using raw LLM decision"
+            )
+
+        # --- EXECUTION ---
+        # Debug logging for v1.5 metrics
+        logger.info(
+            f"[EXECUTION] v1.5 Metrics extracted - "
+            f"proposer_conf: {proposer_conf}, "
+            f"critique_flaws: {critique_flaws}, "
+            f"regime: {current_regime.id}"
+        )
+        
+        # Save trade with all metrics including TRM details
+        trade_id = self.memory.add_trade(
+            context=context,
+            response=llm_decision,
+            proposer_confidence=proposer_conf,
+            critique_flaws_count=critique_flaws,
+            regime_id=current_regime.id,
+            regime_name=current_regime.name,
+            trm_details={
+                "news_impact": news_digest.impact_level.value,
+                "news_sentiment": news_digest.sentiment.value,
+                "news_summary": news_digest.summary,
+                "memory_win_rate": memory_narrative.regime_win_rate,
+                "memory_hallucination_rate": memory_narrative.hallucination_rate,
+                "critic_confidence": llm_decision.confidence,
+                "critic_flaws": critique_flaws or 0,
+                "policy_veto": final_verdict.veto_applied,
+                "policy_veto_reason": final_verdict.veto_reason.value,
+                "override_reason": final_verdict.override_reason,
+                "waterfall_steps": {
+                    "forecast_confidence": forecast_confidence,
+                    "trust_score": trust_result.metrics.overall_trust_score,
+                    "llm_confidence": llm_decision.confidence,
+                    "final_confidence": final_verdict.confidence,
+                    "confidence_adjustment": final_verdict.confidence_adjustment
+                }
+            }
+        )
+        
+        logger.info(f"[EXECUTION] Trade {trade_id} saved with proposer_conf={proposer_conf}, critique_flaws={critique_flaws}")
+
+        # Use Final Verdict for execution decision
+        if final_verdict.decision == ReasoningDecision.APPROVE and not final_verdict.veto_applied:
             processing_time = time.time() - start_time
             
             # Determine Size
@@ -317,23 +510,32 @@ class TradeOrchestrator:
                 symbol=symbol,
                 decision="APPROVE",
                 stage="execution",
-                reason=f"LLM approved with confidence {llm_decision.confidence:.2f}",
+                reason=f"Policy approved with final confidence {final_verdict.confidence:.2f} (LLM: {llm_decision.confidence:.2f})",
                 forecast_output=forecast_output,
                 trust_evaluation=trust_result,
                 llm_response=llm_decision,
-                execution_order={"action": "BUY", "symbol": symbol, "price": current_price, "quantity": quantity}
+                execution_order={"action": "BUY", "symbol": symbol, "price": current_price, "quantity": quantity},
+                final_verdict=final_verdict,
+                news_digest=news_digest,
+                memory_narrative=memory_narrative
             )
         else:
-            logger.info(f"⚠️ [EXECUTION] REJECTED by LLM. Logged to memory.")
+            # Rejected by policy or LLM
+            reject_reason = "VETOED by Risk Policy" if final_verdict.veto_applied else f"LLM {llm_decision.decision.value}"
+            logger.info(f"⚠️ [EXECUTION] REJECTED: {reject_reason}. Logged to memory.")
+            
             # Return TradeDecision even when rejected (for backward compatibility)
             return TradeDecision(
                 symbol=symbol,
-                decision=llm_decision.decision.value,
+                decision=final_verdict.decision.value,
                 stage="execution",
-                reason=f"LLM {llm_decision.decision.value}: {llm_decision.rationale[:100]}",
+                reason=f"{reject_reason}: {final_verdict.override_reason}",
                 forecast_output=forecast_output,
                 trust_evaluation=trust_result,
-                llm_response=llm_decision
+                llm_response=llm_decision,
+                final_verdict=final_verdict,
+                news_digest=news_digest,
+                memory_narrative=memory_narrative
             )
 
     def shutdown(self):
