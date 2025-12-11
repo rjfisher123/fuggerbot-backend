@@ -60,6 +60,30 @@ class TradeMemory:
     
     def _save_memory(self) -> None:
         """Save trade memory to JSON file."""
+        # Reload file before saving to preserve fields added by other processes (e.g., post_mortem)
+        # This prevents overwriting concurrent updates from the reviewer daemon
+        try:
+            current_data = self._load_memory()
+            current_trades = {t.get("trade_id"): t for t in current_data.get("trades", [])}
+            
+            # Merge our in-memory trades with current file trades, preserving post_mortem
+            for trade in self._memory.get("trades", []):
+                trade_id = trade.get("trade_id")
+                if trade_id and trade_id in current_trades:
+                    # Preserve post_mortem and other fields from file that we don't manage
+                    if "post_mortem" in current_trades[trade_id]:
+                        trade["post_mortem"] = current_trades[trade_id]["post_mortem"]
+                    # Update with our changes
+                    current_trades[trade_id].update(trade)
+                elif trade_id:
+                    # New trade, add it
+                    current_trades[trade_id] = trade
+            
+            # Update memory with merged data
+            self._memory["trades"] = list(current_trades.values())
+        except Exception as e:
+            logger.warning(f"Could not merge with file before save: {e}. Proceeding with in-memory data.")
+        
         try:
             self._memory["last_updated"] = datetime.now().isoformat()
             # Write to temporary file first, then rename (atomic write)
@@ -83,7 +107,12 @@ class TradeMemory:
         self,
         context: TradeContext,
         response: DeepSeekResponse,
-        trade_id: Optional[str] = None
+        trade_id: Optional[str] = None,
+        proposer_confidence: Optional[float] = None,
+        critique_flaws_count: Optional[int] = None,
+        regime_id: Optional[str] = None,
+        regime_name: Optional[str] = None,
+        trm_details: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Log a trade decision with context and LLM response.
@@ -92,12 +121,28 @@ class TradeMemory:
             context: TradeContext with trade information
             response: DeepSeekResponse with LLM decision and rationale
             trade_id: Optional trade ID (generated if not provided)
+            proposer_confidence: Initial confidence before critique (v1.5)
+            critique_flaws_count: Number of flaws found by Red Team (v1.5)
+            regime_id: Current macro regime ID (v1.5)
+            regime_name: Current macro regime name (v1.5)
+            trm_details: Optional TRM (Tiny Recursive Model) details from policy agent (v2.0)
         
         Returns:
             Trade ID string
         """
         if trade_id is None:
             trade_id = str(uuid4())
+        
+        # Get final_confidence from response or use confidence
+        final_confidence = getattr(response, 'final_confidence', None) or response.confidence
+        
+        # Get proposer_confidence from parameter or response attribute
+        if proposer_confidence is None:
+            proposer_confidence = getattr(response, 'proposer_confidence', None)
+        
+        # Get critique_flaws_count from parameter or response attribute
+        if critique_flaws_count is None:
+            critique_flaws_count = getattr(response, 'critique_flaws_count', None)
         
         trade_record = {
             "trade_id": trade_id,
@@ -115,7 +160,15 @@ class TradeMemory:
             "rationale": response.rationale,
             "outcome": None,  # Will be updated later
             "pnl": None,  # Will be updated later
-            "regret": None  # Will be calculated when outcome is known
+            "regret": None,  # Will be calculated when outcome is known
+            # v1.5 metrics
+            "proposer_confidence": proposer_confidence,
+            "final_confidence": final_confidence,
+            "critique_flaws_count": critique_flaws_count,
+            "regime_id": regime_id,
+            "regime_name": regime_name,
+            # v2.0 TRM details
+            "trm_details": trm_details
         }
         
         self._memory["trades"].append(trade_record)

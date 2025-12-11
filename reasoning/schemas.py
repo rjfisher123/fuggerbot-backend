@@ -4,7 +4,7 @@ Reasoning schemas for trade decision-making.
 Defines Pydantic V2 models for trade context and AI reasoning responses.
 """
 from enum import Enum
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 
 
@@ -85,6 +85,12 @@ class DeepSeekResponse(BaseModel):
         description="Explanation of the reasoning behind the decision"
     )
     
+    # v1.5 Adversarial Critique Metrics (optional, set by engine)
+    proposer_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Initial confidence before critique (v1.5)")
+    final_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Final confidence after critique (v1.5)")
+    critique_flaws_count: Optional[int] = Field(default=None, ge=0, description="Number of flaws found by Red Team (v1.5)")
+    critique_summary: Optional[str] = Field(default=None, description="Summary of Red Team critique (v1.5)")
+    
     def is_actionable(self, threshold: float = 0.75) -> bool:
         """
         Check if the decision is actionable (approved with high confidence).
@@ -110,4 +116,28 @@ class DeepSeekResponse(BaseModel):
                 "rationale": "Forecast shows 5.4% upside potential with high confidence (0.85). Trust score (0.78) indicates reliable signal. Historical context supports bullish trend."
             }
         }
+
+
+class AnalysisOutcome(str, Enum):
+    """Outcome categorization for post-mortem analysis."""
+    VALIDATED_THESIS = "VALIDATED_THESIS"
+    BAD_TIMING = "BAD_TIMING"
+    UNFORESEEN_EVENT = "UNFORESEEN_EVENT"
+    MODEL_HALLUCINATION = "MODEL_HALLUCINATION"
+    LUCK = "LUCK"  # Won for the wrong reason
+
+
+class PostMortemReport(BaseModel):
+    """Post-trade analysis report."""
+
+    trade_id: str = Field(..., description="Identifier of the evaluated trade")
+    actual_outcome: str = Field(..., description="Actual result (WIN/LOSS)")
+    outcome_category: AnalysisOutcome = Field(
+        ..., description="Categorized outcome of the trade"
+    )
+    root_cause: str = Field(..., description="One-sentence root cause explanation")
+    lesson_learned: str = Field(..., description="What to do differently next time")
+    adjusted_confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="In-hindsight confidence level"
+    )
 
