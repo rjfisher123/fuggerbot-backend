@@ -199,13 +199,21 @@ class TradeOrchestrator:
         
         start_time = time.time()
 
-        # Load dynamic parameters for this symbol
-        params = self.param_loader.get_params(symbol)
+        # Get current regime
+        current_regime = self.regime_tracker.get_current_regime()
+        
+        # Load optimized parameters based on symbol and current regime
+        params = self.param_loader.get_optimized_params(symbol, current_regime.name)
         trust_threshold = float(params.get("trust_threshold", 0.65))
         min_confidence = float(params.get("min_confidence", 0.75))
+        max_position_size = float(params.get("max_position_size", 0.05))
+        stop_loss = float(params.get("stop_loss", 0.05))
+        take_profit = float(params.get("take_profit", 0.15))
+        
         logger.info(
-            f"📐 Using dynamic params for {symbol}: "
-            f"trust_threshold={trust_threshold:.2f}, min_confidence={min_confidence:.2f}"
+            f"📐 Using optimized params for {symbol} in '{current_regime.name}': "
+            f"Trust>{trust_threshold:.2f}, Conf>{min_confidence:.2f}, "
+            f"PosSize<{max_position_size:.0%}, SL={stop_loss:.0%}, TP={take_profit:.0%}"
         )
         
         # --- STAGE 0: DATA ---
@@ -332,7 +340,6 @@ class TradeOrchestrator:
             )
         
         # 2. Memory Perception (Enhanced with Global Data Lake)
-        current_regime = self.regime_tracker.get_current_regime()
         try:
             # Get MemoryNarrative object for metrics
             memory_narrative = self.memory_summarizer.summarize(symbol, current_regime.id)

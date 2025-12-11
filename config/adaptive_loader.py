@@ -236,5 +236,104 @@ class AdaptiveParamLoader:
             Dictionary with default parameters
         """
         return self._params.get("defaults", DEFAULT_PARAMS).copy()
+    
+    def get_optimized_params(self, symbol: str, regime_name: str) -> Dict[str, Any]:
+        """
+        Get optimized parameters from War Games results for a specific symbol and regime.
+        
+        Loads parameters from data/optimized_params.json and finds the best match
+        for the given symbol and market regime using fuzzy matching.
+        
+        Args:
+            symbol: Trading symbol (e.g., "BTC-USD", "NVDA")
+            regime_name: Current market regime name (e.g., "Tech bounce back")
+        
+        Returns:
+            Dictionary with optimized parameters:
+            {
+                "trust_threshold": float,
+                "min_confidence": float,
+                "max_position_size": float,
+                "stop_loss": float,
+                "take_profit": float,
+                "cooldown_days": float
+            }
+        """
+        optimized_file = Path("data/optimized_params.json")
+        
+        # Fallback: Conservative params if file not found
+        if not optimized_file.exists():
+            logger.warning(f"Optimized params file not found: {optimized_file}, using conservative fallback")
+            return {
+                "trust_threshold": 0.75,
+                "min_confidence": 0.80,
+                "max_position_size": 0.05,
+                "stop_loss": 0.03,
+                "take_profit": 0.10,
+                "cooldown_days": 2.0
+            }
+        
+        try:
+            with open(optimized_file, 'r') as f:
+                optimized_results = json.load(f)
+            
+            # Fuzzy match: Find entry where symbol matches AND regime contains key words
+            best_match = None
+            best_score = -1
+            
+            for entry in optimized_results:
+                entry_symbol = entry.get('symbol', '')
+                entry_regime = entry.get('regime', '').lower()
+                opt_score = entry.get('score', -999)
+                
+                # Exact symbol match required
+                if entry_symbol != symbol:
+                    continue
+                
+                # Fuzzy regime match: Check if key words overlap
+                regime_words = set(regime_name.lower().split())
+                entry_words = set(entry_regime.split())
+                overlap = len(regime_words & entry_words)
+                
+                # Score = word overlap + optimization score bonus
+                match_score = overlap * 10 + opt_score
+                
+                if match_score > best_score:
+                    best_score = match_score
+                    best_match = entry
+            
+            if best_match:
+                params = best_match.get('best_params', {})
+                logger.info(
+                    f"✅ Loaded optimized params for {symbol} in '{regime_name}': "
+                    f"Strategy='{best_match.get('best_strategy_name', 'Unknown')}', "
+                    f"Score={best_match.get('score', 0):.1f}"
+                )
+                return params
+            else:
+                logger.warning(
+                    f"No optimized params found for {symbol} in '{regime_name}', "
+                    f"using conservative fallback"
+                )
+                return {
+                    "trust_threshold": 0.75,
+                    "min_confidence": 0.80,
+                    "max_position_size": 0.05,
+                    "stop_loss": 0.03,
+                    "take_profit": 0.10,
+                    "cooldown_days": 2.0
+                }
+                
+        except Exception as e:
+            logger.error(f"Error loading optimized params: {e}, using conservative fallback")
+            return {
+                "trust_threshold": 0.75,
+                "min_confidence": 0.80,
+                "max_position_size": 0.05,
+                "stop_loss": 0.03,
+                "take_profit": 0.10,
+                "cooldown_days": 2.0
+            }
+
 
 
