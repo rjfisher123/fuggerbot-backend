@@ -233,3 +233,4 @@ class SignalExtractor:
             "timestamp": datetime.now().isoformat()
         }
 
+

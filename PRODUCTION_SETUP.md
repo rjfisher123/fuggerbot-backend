@@ -139,3 +139,4 @@ To fix this:
 - Check that `.env` file encoding is UTF-8
 - Verify file is in project root (same directory as `main.py`)
 
+

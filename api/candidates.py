@@ -176,3 +176,4 @@ async def get_candidate_row(candidate_id: int, request: Request):
 
 
 
+

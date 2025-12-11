@@ -1,0 +1,18 @@
+{
+  "defaults": {
+    "trust_threshold": 0.65,
+    "min_confidence": 0.75
+  },
+  "symbols": {
+    "BTC-USD": {
+      "min_confidence": 0.95
+    },
+    "ETH-USD": {
+      "min_confidence": 0.95
+    },
+    "NVDA": {
+      "trust_threshold": 0.5,
+      "min_confidence": 0.8500000000000001
+    }
+  }
+}

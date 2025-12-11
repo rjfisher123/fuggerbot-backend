@@ -133,3 +133,4 @@ def get_asset_count() -> dict:
         for name, info in ASSET_CLASSES.items()
     }
 
+
