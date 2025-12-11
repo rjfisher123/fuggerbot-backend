@@ -43,6 +43,35 @@ def ensure_log_dir():
         logger.info(f"📁 Created log directory: {LOG_DIR}")
 
 
+def cleanup_ports():
+    """
+    Clean up any processes using the dashboard ports.
+    
+    This prevents "Port already in use" errors from previous runs.
+    """
+    ports = [8501, 8502]
+    for port in ports:
+        try:
+            # Find processes using the port
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    try:
+                        os.kill(int(pid), signal.SIGTERM)
+                        logger.info(f"🧹 Cleaned up process {pid} on port {port}")
+                    except (ProcessLookupError, ValueError):
+                        pass
+        except Exception as e:
+            # Not critical if cleanup fails
+            pass
+
+
 def start_process(command: list, name: str, log_file: str):
     """
     Start a background process and pipe output to a log file.
@@ -98,6 +127,7 @@ def signal_handler(sig, frame):
 def main():
     """Main entry point for the unified launcher."""
     ensure_log_dir()
+    cleanup_ports()  # Clean up ports before starting
     
     # Register Signal Handler (Ctrl+C)
     signal.signal(signal.SIGINT, signal_handler)
