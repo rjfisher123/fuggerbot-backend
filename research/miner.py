@@ -23,6 +23,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
+# Import technical analysis library (Phase 3)
+from models.technical_analysis import add_indicators, is_quality_setup
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -88,42 +91,78 @@ class LearningBookMiner:
                 
                 df = self.conn.execute(query).fetchdf()
                 
-                if len(df) < 30:
-                    logger.warning(f"⚠️  Insufficient data for {symbol} ({len(df)} rows)")
+                if len(df) < 60:  # Need more data for technical indicators
+                    logger.warning(f"⚠️  Insufficient data for {symbol} ({len(df)} rows, need 60+)")
                     continue
                 
-                # Calculate technical indicators
+                # Phase 3: Add Technical Indicators (RSI, MACD, Volume, Trend)
+                df = add_indicators(df)
+                
+                # Also keep legacy indicators for compatibility
                 df['returns'] = df['close'].pct_change()
                 df['volatility'] = df['returns'].rolling(window=30).std()
-                df['sma_20'] = df['close'].rolling(window=20).mean()
-                df['sma_50'] = df['close'].rolling(window=50).mean()
-                df['trend'] = (df['sma_20'] > df['sma_50']).astype(int)
                 
-                # Mine patterns (look for high-conviction setups)
-                for i in range(50, len(df) - 5):  # Need 50 days lookback, 5 days forward
+                # Mine patterns with STRICT quality filters
+                patterns_before_filter = 0
+                patterns_after_filter = 0
+                
+                for i in range(60, len(df) - 5):  # Need 60 days for indicators, 5 days forward
                     row = df.iloc[i]
+                    patterns_before_filter += 1
                     
-                    # Pattern criteria: Strong trend + Low volatility
-                    if pd.notna(row['trend']) and pd.notna(row['volatility']):
-                        if row['trend'] == 1 and row['volatility'] < df['volatility'].quantile(0.3):
-                            # Look ahead to see if trade was profitable
-                            entry_price = row['close']
-                            future_prices = df['close'].iloc[i+1:i+6]
-                            max_gain = (future_prices.max() - entry_price) / entry_price
-                            max_loss = (future_prices.min() - entry_price) / entry_price
-                            
-                            pattern = {
-                                'symbol': symbol,
-                                'date': str(row['date']),
-                                'entry_price': float(entry_price),
-                                'trend_signal': 'BULLISH',
-                                'volatility': float(row['volatility']),
-                                'max_gain_5d': float(max_gain * 100),
-                                'max_loss_5d': float(max_loss * 100),
-                                'outcome': 'WIN' if max_gain > 0.02 else 'LOSS'
-                            }
-                            
-                            all_patterns.append(pattern)
+                    # Phase 3: QUALITY FILTER (The Alpha)
+                    # Only record setups that meet ALL technical criteria
+                    quality_check = is_quality_setup(
+                        rsi=row['rsi_14'],
+                        volume_ratio=row['volume_ratio'],
+                        macd_hist=row['macd_hist'],
+                        trend_sma=row['trend_sma'],
+                        rsi_max=70.0,      # Not overbought
+                        vol_min=1.0,       # Volume confirmed
+                        macd_positive=True # Momentum positive
+                    )
+                    
+                    if not quality_check:
+                        continue  # Skip low-quality setups
+                    
+                    patterns_after_filter += 1
+                    
+                    # Look ahead to see if trade was profitable
+                    entry_price = row['close']
+                    future_prices = df['close'].iloc[i+1:i+6]
+                    max_gain = (future_prices.max() - entry_price) / entry_price
+                    max_loss = (future_prices.min() - entry_price) / entry_price
+                    
+                    # Calculate expected value for this setup
+                    expected_gain = max_gain if max_gain > 0.02 else 0
+                    
+                    pattern = {
+                        'symbol': symbol,
+                        'date': str(row['date']),
+                        'entry_price': float(entry_price),
+                        'trend_signal': 'BULLISH',
+                        
+                        # Legacy metrics
+                        'volatility': float(row['volatility']) if pd.notna(row['volatility']) else 0.0,
+                        
+                        # Phase 3: Technical Indicator Values
+                        'rsi_14': float(row['rsi_14']),
+                        'macd_hist': float(row['macd_hist']),
+                        'volume_ratio': float(row['volume_ratio']),
+                        'trend_sma': float(row['trend_sma']),
+                        
+                        # Outcome metrics
+                        'max_gain_5d': float(max_gain * 100),
+                        'max_loss_5d': float(max_loss * 100),
+                        'expected_gain_pct': float(expected_gain * 100),
+                        'outcome': 'WIN' if max_gain > 0.02 else 'LOSS'
+                    }
+                    
+                    all_patterns.append(pattern)
+                
+                filtered_count = len([p for p in all_patterns if p['symbol'] == symbol])
+                filter_rate = (patterns_after_filter / patterns_before_filter * 100) if patterns_before_filter > 0 else 0
+                logger.info(f"✅ Mined {filtered_count} quality patterns from {symbol} (filter rate: {filter_rate:.1f}%)")
                 
                 logger.info(f"✅ Mined {len([p for p in all_patterns if p['symbol'] == symbol])} patterns from {symbol}")
             
@@ -136,11 +175,28 @@ class LearningBookMiner:
     
     def save_learning_book(self, patterns: List[Dict[str, Any]]):
         """Save patterns to learning book JSON."""
+        # Calculate quality metrics
+        win_rate = len([p for p in patterns if p['outcome'] == 'WIN']) / len(patterns) if patterns else 0
+        avg_gain = sum([p['max_gain_5d'] for p in patterns if p['outcome'] == 'WIN']) / len([p for p in patterns if p['outcome'] == 'WIN']) if [p for p in patterns if p['outcome'] == 'WIN'] else 0
+        avg_loss = sum([abs(p['max_loss_5d']) for p in patterns if p['outcome'] == 'LOSS']) / len([p for p in patterns if p['outcome'] == 'LOSS']) if [p for p in patterns if p['outcome'] == 'LOSS'] else 0
+        
         learning_book = {
-            'version': '2.0',
+            'version': '2.1-phase3',
             'created_at': datetime.now().isoformat(),
             'total_patterns': len(patterns),
             'symbols_covered': list(set([p['symbol'] for p in patterns])),
+            'quality_filters': {
+                'rsi_max': 70.0,
+                'volume_min': 1.0,
+                'macd_positive': True,
+                'trend_positive': True
+            },
+            'statistics': {
+                'win_rate': round(win_rate, 3),
+                'avg_win_pct': round(avg_gain, 2),
+                'avg_loss_pct': round(avg_loss, 2),
+                'expected_value': round(win_rate * avg_gain - (1 - win_rate) * avg_loss, 2)
+            },
             'patterns': patterns
         }
         
@@ -154,7 +210,7 @@ class LearningBookMiner:
     def run(self):
         """Execute full mining pipeline."""
         logger.info("=" * 80)
-        logger.info("🚀 LEARNING BOOK MINER - Operation Clean Slate v2.0")
+        logger.info("🚀 LEARNING BOOK MINER - Phase 3: Quality Signal Enhancement")
         logger.info("=" * 80)
         
         self.connect()
@@ -181,9 +237,24 @@ if __name__ == "__main__":
     miner = LearningBookMiner()
     patterns = miner.run()
     
+    # Calculate metrics
+    win_rate = len([p for p in patterns if p['outcome'] == 'WIN']) / len(patterns) if patterns else 0
+    avg_win = sum([p['max_gain_5d'] for p in patterns if p['outcome'] == 'WIN']) / len([p for p in patterns if p['outcome'] == 'WIN']) if [p for p in patterns if p['outcome'] == 'WIN'] else 0
+    avg_loss = sum([abs(p['max_loss_5d']) for p in patterns if p['outcome'] == 'LOSS']) / len([p for p in patterns if p['outcome'] == 'LOSS']) if [p for p in patterns if p['outcome'] == 'LOSS'] else 0
+    expected_value = win_rate * avg_win - (1 - win_rate) * avg_loss
+    
     # Print summary
-    print(f"\n📊 Summary:")
-    print(f"  - Total Patterns: {len(patterns)}")
-    print(f"  - Win Rate: {len([p for p in patterns if p['outcome'] == 'WIN']) / len(patterns):.1%}")
+    print(f"\n📊 Phase 3 Mining Summary:")
+    print(f"  - Total Quality Patterns: {len(patterns)}")
+    print(f"  - Win Rate: {win_rate:.1%}")
+    print(f"  - Avg Win: {avg_win:.2f}%")
+    print(f"  - Avg Loss: {avg_loss:.2f}%")
+    print(f"  - Expected Value: {expected_value:.2f}%")
     print(f"  - Symbols: {set([p['symbol'] for p in patterns])}")
-    print(f"\n✅ Success! Learning Book ready for War Games.")
+    
+    if expected_value > 0:
+        print(f"\n✅ SUCCESS! Positive expected value (+{expected_value:.2f}%) - Strategy has edge!")
+    else:
+        print(f"\n⚠️  WARNING: Negative expected value ({expected_value:.2f}%) - Need stricter filters!")
+    
+    print(f"\n✅ Learning Book ready for War Games with technical filters.")
