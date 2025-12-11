@@ -1,0 +1,244 @@
+================================================================================
+STRATEGY OPTIMIZATION SUMMARY
+================================================================================
+
+Symbol: BTC-USD
+Regime: High volatility, regime shifts
+Best Strategy: Inflation Shock (2022) - BTC-USD - Aggressive
+Score: -100.00
+Metrics:
+  - Return: -3.0%
+  - Sharpe: -0.49
+  - Win Rate: 33.3%
+  - Max DD: 3.4%
+  - Trades: 6.0
+Parameters:
+  - trust_threshold: 0.55
+  - min_confidence: 0.7
+  - max_position_size: 0.15
+  - stop_loss: 0.08
+  - take_profit: 0.2
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: BTC-USD
+Regime: Strong upward trend, low volatility
+Best Strategy: Bull Run (2021) - BTC-USD - Aggressive
+Score: 16.64
+Metrics:
+  - Return: +0.2%
+  - Sharpe: 0.02
+  - Win Rate: 44.4%
+  - Max DD: 2.9%
+  - Trades: 9.0
+Parameters:
+  - trust_threshold: 0.55
+  - min_confidence: 0.7
+  - max_position_size: 0.15
+  - stop_loss: 0.08
+  - take_profit: 0.2
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: BTC-USD
+Regime: Tech bounce back, choppy markets
+Best Strategy: Recovery Rally (2023) - BTC-USD - Conservative
+Score: 50.16
+Metrics:
+  - Return: +0.3%
+  - Sharpe: 0.00
+  - Win Rate: 100.0%
+  - Max DD: 0.0%
+  - Trades: 1.0
+Parameters:
+  - trust_threshold: 0.75
+  - min_confidence: 0.8
+  - max_position_size: 0.05
+  - stop_loss: 0.03
+  - take_profit: 0.1
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: ETH-USD
+Regime: High volatility, regime shifts
+Best Strategy: Inflation Shock (2022) - ETH-USD - Aggressive
+Score: 18.51
+Metrics:
+  - Return: +0.3%
+  - Sharpe: 0.03
+  - Win Rate: 50.0%
+  - Max DD: 3.5%
+  - Trades: 6.0
+Parameters:
+  - trust_threshold: 0.55
+  - min_confidence: 0.7
+  - max_position_size: 0.15
+  - stop_loss: 0.08
+  - take_profit: 0.2
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: ETH-USD
+Regime: Strong upward trend, low volatility
+Best Strategy: Bull Run (2021) - ETH-USD - Balanced
+Score: 41.95
+Metrics:
+  - Return: +3.9%
+  - Sharpe: 0.59
+  - Win Rate: 71.4%
+  - Max DD: 0.8%
+  - Trades: 7.0
+Parameters:
+  - trust_threshold: 0.65
+  - min_confidence: 0.75
+  - max_position_size: 0.1
+  - stop_loss: 0.05
+  - take_profit: 0.15
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: ETH-USD
+Regime: Tech bounce back, choppy markets
+Best Strategy: Recovery Rally (2023) - ETH-USD - Balanced
+Score: 23.24
+Metrics:
+  - Return: +0.9%
+  - Sharpe: 0.26
+  - Win Rate: 42.9%
+  - Max DD: 0.6%
+  - Trades: 7.0
+Parameters:
+  - trust_threshold: 0.65
+  - min_confidence: 0.75
+  - max_position_size: 0.1
+  - stop_loss: 0.05
+  - take_profit: 0.15
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: MSFT
+Regime: High volatility, regime shifts
+Best Strategy: Inflation Shock (2022) - MSFT - Aggressive
+Score: -100.00
+Metrics:
+  - Return: -1.5%
+  - Sharpe: -1.04
+  - Win Rate: 33.3%
+  - Max DD: 1.5%
+  - Trades: 3.0
+Parameters:
+  - trust_threshold: 0.55
+  - min_confidence: 0.7
+  - max_position_size: 0.15
+  - stop_loss: 0.08
+  - take_profit: 0.2
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: MSFT
+Regime: Strong upward trend, low volatility
+Best Strategy: Bull Run (2021) - MSFT - Aggressive
+Score: 50.06
+Metrics:
+  - Return: +0.1%
+  - Sharpe: 0.00
+  - Win Rate: 100.0%
+  - Max DD: 0.0%
+  - Trades: 1.0
+Parameters:
+  - trust_threshold: 0.55
+  - min_confidence: 0.7
+  - max_position_size: 0.15
+  - stop_loss: 0.08
+  - take_profit: 0.2
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: MSFT
+Regime: Tech bounce back, choppy markets
+Best Strategy: Recovery Rally (2023) - MSFT - Aggressive
+Score: 33.99
+Metrics:
+  - Return: +0.6%
+  - Sharpe: 0.23
+  - Win Rate: 66.7%
+  - Max DD: 1.0%
+  - Trades: 6.0
+Parameters:
+  - trust_threshold: 0.55
+  - min_confidence: 0.7
+  - max_position_size: 0.15
+  - stop_loss: 0.08
+  - take_profit: 0.2
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: NVDA
+Regime: High volatility, regime shifts
+Best Strategy: Inflation Shock (2022) - NVDA - Balanced
+Score: 24.84
+Metrics:
+  - Return: +0.2%
+  - Sharpe: 0.10
+  - Win Rate: 50.0%
+  - Max DD: 0.6%
+  - Trades: 4.0
+Parameters:
+  - trust_threshold: 0.65
+  - min_confidence: 0.75
+  - max_position_size: 0.1
+  - stop_loss: 0.05
+  - take_profit: 0.15
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: NVDA
+Regime: Strong upward trend, low volatility
+Best Strategy: Bull Run (2021) - NVDA - Aggressive
+Score: -100.00
+Metrics:
+  - Return: -1.2%
+  - Sharpe: -0.48
+  - Win Rate: 33.3%
+  - Max DD: 1.4%
+  - Trades: 3.0
+Parameters:
+  - trust_threshold: 0.55
+  - min_confidence: 0.7
+  - max_position_size: 0.15
+  - stop_loss: 0.08
+  - take_profit: 0.2
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+
+Symbol: NVDA
+Regime: Tech bounce back, choppy markets
+Best Strategy: Recovery Rally (2023) - NVDA - Balanced
+Score: 40.19
+Metrics:
+  - Return: +2.5%
+  - Sharpe: 0.45
+  - Win Rate: 71.4%
+  - Max DD: 0.7%
+  - Trades: 7.0
+Parameters:
+  - trust_threshold: 0.65
+  - min_confidence: 0.75
+  - max_position_size: 0.1
+  - stop_loss: 0.05
+  - take_profit: 0.15
+  - cooldown_days: 2.0
+
+--------------------------------------------------------------------------------
+

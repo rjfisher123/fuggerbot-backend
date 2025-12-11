@@ -1,0 +1,254 @@
+[
+  {
+    "symbol": "BTC-USD",
+    "regime": "High volatility, regime shifts",
+    "best_strategy_name": "Inflation Shock (2022) - BTC-USD - Aggressive",
+    "best_params": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": -0.4896080762899784,
+      "return": -3.0152114218026873,
+      "drawdown": 3.399436635424481,
+      "win_rate": 0.3333333333333333,
+      "total_trades": 6.0
+    },
+    "score": -100.0
+  },
+  {
+    "symbol": "BTC-USD",
+    "regime": "Strong upward trend, low volatility",
+    "best_strategy_name": "Bull Run (2021) - BTC-USD - Aggressive",
+    "best_params": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.020413921325753256,
+      "return": 0.172544767862837,
+      "drawdown": 2.934450946455018,
+      "win_rate": 0.4444444444444444,
+      "total_trades": 9.0
+    },
+    "score": 16.64373192650114
+  },
+  {
+    "symbol": "BTC-USD",
+    "regime": "Tech bounce back, choppy markets",
+    "best_strategy_name": "Recovery Rally (2023) - BTC-USD - Conservative",
+    "best_params": {
+      "trust_threshold": 0.75,
+      "min_confidence": 0.8,
+      "max_position_size": 0.05,
+      "stop_loss": 0.03,
+      "take_profit": 0.1,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.0,
+      "return": 0.31826823347922983,
+      "drawdown": 0.0,
+      "win_rate": 1.0,
+      "total_trades": 1.0
+    },
+    "score": 50.159134116739615
+  },
+  {
+    "symbol": "ETH-USD",
+    "regime": "High volatility, regime shifts",
+    "best_strategy_name": "Inflation Shock (2022) - ETH-USD - Aggressive",
+    "best_params": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.03425233700979859,
+      "return": 0.27516117409457364,
+      "drawdown": 3.4873107804526065,
+      "win_rate": 0.5,
+      "total_trades": 6.0
+    },
+    "score": 18.50548239624006
+  },
+  {
+    "symbol": "ETH-USD",
+    "regime": "Strong upward trend, low volatility",
+    "best_strategy_name": "Bull Run (2021) - ETH-USD - Balanced",
+    "best_params": {
+      "trust_threshold": 0.65,
+      "min_confidence": 0.75,
+      "max_position_size": 0.1,
+      "stop_loss": 0.05,
+      "take_profit": 0.15,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.5879160088273451,
+      "return": 3.910221483325276,
+      "drawdown": 0.8010438044290074,
+      "win_rate": 0.7142857142857143,
+      "total_trades": 7.0
+    },
+    "score": 41.94646893536379
+  },
+  {
+    "symbol": "ETH-USD",
+    "regime": "Tech bounce back, choppy markets",
+    "best_strategy_name": "Recovery Rally (2023) - ETH-USD - Balanced",
+    "best_params": {
+      "trust_threshold": 0.65,
+      "min_confidence": 0.75,
+      "max_position_size": 0.1,
+      "stop_loss": 0.05,
+      "take_profit": 0.15,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.2579119898201488,
+      "return": 0.8796093395979915,
+      "drawdown": 0.6019880911778678,
+      "win_rate": 0.42857142857142855,
+      "total_trades": 7.0
+    },
+    "score": 23.243519814216175
+  },
+  {
+    "symbol": "MSFT",
+    "regime": "High volatility, regime shifts",
+    "best_strategy_name": "Inflation Shock (2022) - MSFT - Aggressive",
+    "best_params": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": -1.041543549322625,
+      "return": -1.5300602657356648,
+      "drawdown": 1.5300602657356648,
+      "win_rate": 0.3333333333333333,
+      "total_trades": 3.0
+    },
+    "score": -100.0
+  },
+  {
+    "symbol": "MSFT",
+    "regime": "Strong upward trend, low volatility",
+    "best_strategy_name": "Bull Run (2021) - MSFT - Aggressive",
+    "best_params": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.0,
+      "return": 0.12992644499809103,
+      "drawdown": 0.0,
+      "win_rate": 1.0,
+      "total_trades": 1.0
+    },
+    "score": 50.064963222499046
+  },
+  {
+    "symbol": "MSFT",
+    "regime": "Tech bounce back, choppy markets",
+    "best_strategy_name": "Recovery Rally (2023) - MSFT - Aggressive",
+    "best_params": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.228575511985749,
+      "return": 0.6144926243004375,
+      "drawdown": 0.9665129299770175,
+      "win_rate": 0.6666666666666666,
+      "total_trades": 6.0
+    },
+    "score": 33.993308905387
+  },
+  {
+    "symbol": "NVDA",
+    "regime": "High volatility, regime shifts",
+    "best_strategy_name": "Inflation Shock (2022) - NVDA - Balanced",
+    "best_params": {
+      "trust_threshold": 0.65,
+      "min_confidence": 0.75,
+      "max_position_size": 0.1,
+      "stop_loss": 0.05,
+      "take_profit": 0.15,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.09670901999672059,
+      "return": 0.15218860340541143,
+      "drawdown": 0.6016408822453059,
+      "win_rate": 0.5,
+      "total_trades": 4.0
+    },
+    "score": 24.8399027371793
+  },
+  {
+    "symbol": "NVDA",
+    "regime": "Strong upward trend, low volatility",
+    "best_strategy_name": "Bull Run (2021) - NVDA - Aggressive",
+    "best_params": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": -0.4839301396562799,
+      "return": -1.1875132561627288,
+      "drawdown": 1.3775146009085075,
+      "win_rate": 0.3333333333333333,
+      "total_trades": 3.0
+    },
+    "score": -100.0
+  },
+  {
+    "symbol": "NVDA",
+    "regime": "Tech bounce back, choppy markets",
+    "best_strategy_name": "Recovery Rally (2023) - NVDA - Balanced",
+    "best_params": {
+      "trust_threshold": 0.65,
+      "min_confidence": 0.75,
+      "max_position_size": 0.1,
+      "stop_loss": 0.05,
+      "take_profit": 0.15,
+      "cooldown_days": 2.0
+    },
+    "metrics": {
+      "sharpe": 0.4544618165761693,
+      "return": 2.543472578026631,
+      "drawdown": 0.6700939468899216,
+      "win_rate": 0.7142857142857143,
+      "total_trades": 7.0
+    },
+    "score": 40.19045227528088
+  }
+]
