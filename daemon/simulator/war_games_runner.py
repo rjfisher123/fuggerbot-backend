@@ -22,6 +22,9 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
 
+# Phase 3: Import technical analysis for quality filters
+from models.technical_analysis import add_indicators, is_quality_setup
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -334,6 +337,9 @@ class WarGamesRunner:
             logger.error("No data loaded")
             return None
         
+        # Phase 3: Add technical indicators for quality filtering
+        df = add_indicators(df)
+        
         # Initialize state
         balance = initial_balance
         position = None  # Current open position
@@ -440,11 +446,25 @@ class WarGamesRunner:
                 trust_score = self._calculate_trust_score(df, idx)
                 forecast_confidence, target_price = self._calculate_forecast_confidence(df, idx)
                 
-                # Decision logic (proxy for LLM + Policy)
+                # Phase 3: Technical Quality Filter
+                # Only trade if RSI < 70, Volume > 1.0, MACD > 0, Trend positive
+                row = df.iloc[idx]
+                quality_check = is_quality_setup(
+                    rsi=row['rsi_14'],
+                    volume_ratio=row['volume_ratio'],
+                    macd_hist=row['macd_hist'],
+                    trend_sma=row['trend_sma'],
+                    rsi_max=70.0,      # Not overbought
+                    vol_min=1.0,       # Volume confirmed
+                    macd_positive=True # Momentum positive
+                )
+                
+                # Decision logic (proxy for LLM + Policy + Phase 3 Quality)
                 should_enter = (
                     trust_score >= params.trust_threshold and
                     forecast_confidence >= params.min_confidence and
-                    target_price > current_price * 1.02  # At least 2% upside (was 5%)
+                    target_price > current_price * 1.02 and  # At least 2% upside
+                    quality_check  # Phase 3: Technical quality filter
                 )
                 
                 if should_enter:
