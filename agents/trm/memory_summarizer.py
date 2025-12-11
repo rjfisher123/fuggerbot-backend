@@ -15,14 +15,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# Initialize logger first (needed for import error handling)
+logger = logging.getLogger(__name__)
+
 try:
     import duckdb
     DUCKDB_AVAILABLE = True
 except ImportError:
     DUCKDB_AVAILABLE = False
     logger.warning("DuckDB not available - market context features disabled")
-
-logger = logging.getLogger(__name__)
 
 
 class MemoryNarrative(BaseModel):
@@ -242,7 +243,7 @@ class MemorySummarizer:
         
         return "MODERATE: Confidence calibration unclear"
     
-    def _get_db_connection(self) -> Optional[duckdb.DuckDBPyConnection]:
+    def _get_db_connection(self) -> Optional["duckdb.DuckDBPyConnection"]:
         """
         Get DuckDB connection.
         
@@ -253,7 +254,7 @@ class MemorySummarizer:
             return None
         
         try:
-            return duckdb.connect(str(self.db_path), read_only=True)
+            return duckdb.connect(str(self.db_path), read_only=True)  # type: ignore
         except Exception as e:
             logger.error(f"Failed to connect to DuckDB: {e}")
             return None
