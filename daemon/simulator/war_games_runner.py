@@ -367,7 +367,21 @@ class WarGamesRunner:
                 )
                 
                 if should_enter:
-                    position_size = balance * params.max_position_size
+                    # Volatility-Adjusted Position Sizing (Operation Clean Slate v2.0)
+                    # Target: Risk 2% of account per trade
+                    target_risk = balance * 0.02
+                    
+                    # Calculate position size based on stop loss distance
+                    stop_loss_distance = params.stop_loss
+                    position_size_from_risk = target_risk / stop_loss_distance
+                    
+                    # Cap at maximum position size (20% of account max)
+                    max_position_value = balance * min(params.max_position_size, 0.20)
+                    position_size = min(position_size_from_risk, max_position_value)
+                    
+                    # Ensure we have enough balance
+                    position_size = min(position_size, balance * 0.95)  # Keep 5% cash buffer
+                    
                     shares = position_size / current_price
                     
                     position = {
@@ -514,8 +528,8 @@ class WarGamesRunner:
             )
         }
         
-        # Symbols to test
-        symbols = ["BTC-USD", "NVDA"]
+        # Symbols to test (expanded for v2.0)
+        symbols = ["BTC-USD", "ETH-USD", "NVDA", "MSFT"]
         
         # Run all combinations
         all_results = []
