@@ -16,19 +16,33 @@ st.title("🧠 FuggerBot Reasoning State")
 
 # --- SIDEBAR CONFIG ---
 st.sidebar.header("Configuration")
-data_source = st.sidebar.radio(
-    "Select Memory Source:",
-    ("Live Production", "War Games Simulation"),
+view_mode = st.sidebar.radio(
+    "Dashboard Mode:",
+    ("Trade Analysis", "War Games Results"),
     index=0
 )
 
-# Map selection to filename
-if data_source == "Live Production":
-    MEMORY_FILE = project_root / "data" / "trade_memory.json"
+# Only show data source selection in Trade Analysis mode
+if view_mode == "Trade Analysis":
+    data_source = st.sidebar.selectbox(
+        "Select Memory Source:",
+        ("Live Production", "War Games Simulation"),
+        index=0
+    )
 else:
-    MEMORY_FILE = project_root / "data" / "test_memory_wargames.json"
+    data_source = None
 
-st.sidebar.info(f"Reading from: `{MEMORY_FILE}`")
+# Map selection to filename (only for Trade Analysis mode)
+if view_mode == "Trade Analysis":
+    if data_source == "Live Production":
+        MEMORY_FILE = project_root / "data" / "trade_memory.json"
+    else:
+        MEMORY_FILE = project_root / "data" / "test_memory_wargames.json"
+    st.sidebar.info(f"Reading from: `{MEMORY_FILE}`")
+else:
+    MEMORY_FILE = None
+    WAR_GAMES_FILE = project_root / "data" / "war_games_results.json"
+    st.sidebar.info(f"War Games: `{WAR_GAMES_FILE}`")
 
 # Add refresh button to clear cache
 if st.sidebar.button("🔄 Refresh Data", help="Clear cache and reload data"):
@@ -124,6 +138,236 @@ def load_data(filepath):
     return df
 
 
+# =============================
+# MAIN DASHBOARD ROUTING
+# =============================
+
+if view_mode == "War Games Results":
+    # --- WAR GAMES ANALYSIS MODE ---
+    st.title("🎮 War Games Analysis")
+    st.markdown("**High-speed backtesting results across multiple scenarios**")
+    
+    @st.cache_data(ttl=60)
+    def load_war_games_data(filepath):
+        """Load war games results from JSON file."""
+        filepath = Path(filepath)
+        if not filepath.exists():
+            return None
+        
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            return data
+        except Exception as e:
+            st.error(f"Error loading War Games data: {e}")
+            return None
+    
+    war_games_data = load_war_games_data(WAR_GAMES_FILE)
+    
+    if war_games_data is None:
+        st.warning("⚠️ No War Games results found. Run simulations first:")
+        st.code("python daemon/simulator/war_games_runner.py", language="bash")
+        st.stop()
+    
+    # Extract metadata
+    run_timestamp = war_games_data.get('run_timestamp', 'Unknown')
+    total_campaigns = war_games_data.get('total_campaigns', 0)
+    results = war_games_data.get('results', [])
+    
+    if not results:
+        st.error("No campaign results found in war_games_results.json")
+        st.stop()
+    
+    # Convert to DataFrame
+    results_df = pd.DataFrame(results)
+    
+    # Display metadata
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Campaigns", total_campaigns)
+    with col2:
+        st.metric("Last Run", run_timestamp.split('T')[0] if 'T' in run_timestamp else run_timestamp)
+    with col3:
+        unique_scenarios = results_df['campaign_name'].str.split(' - ').str[0].nunique()
+        st.metric("Scenarios Tested", unique_scenarios)
+    
+    st.markdown("---")
+    
+    # --- LEADERBOARD ---
+    st.header("🏆 Campaign Leaderboard")
+    
+    # Extract key metrics for display
+    leaderboard = results_df[[
+        'campaign_name', 'symbol', 'total_return_pct', 'win_rate', 
+        'max_drawdown_pct', 'sharpe_ratio', 'total_trades'
+    ]].copy()
+    
+    # Parse campaign name to extract scenario and param set
+    leaderboard['scenario'] = leaderboard['campaign_name'].str.split(' - ').str[0]
+    leaderboard['param_set'] = leaderboard['campaign_name'].str.split(' - ').str[-1]
+    
+    # Reorder columns
+    leaderboard = leaderboard[[
+        'scenario', 'symbol', 'param_set', 'total_return_pct', 
+        'win_rate', 'max_drawdown_pct', 'sharpe_ratio', 'total_trades'
+    ]]
+    
+    # Format for display
+    leaderboard_display = leaderboard.copy()
+    leaderboard_display['total_return_pct'] = leaderboard_display['total_return_pct'].apply(lambda x: f"{x:.1f}%")
+    leaderboard_display['win_rate'] = leaderboard_display['win_rate'].apply(lambda x: f"{x:.1%}")
+    leaderboard_display['max_drawdown_pct'] = leaderboard_display['max_drawdown_pct'].apply(lambda x: f"{x:.1f}%")
+    leaderboard_display['sharpe_ratio'] = leaderboard_display['sharpe_ratio'].apply(lambda x: f"{x:.2f}")
+    
+    # Highlight best performer for each scenario
+    best_by_scenario = leaderboard.loc[
+        leaderboard.groupby('scenario')['total_return_pct'].idxmax()
+    ]['campaign_name'].tolist()
+    
+    st.dataframe(
+        leaderboard_display,
+        use_container_width=True,
+        height=400
+    )
+    
+    st.caption(f"✨ Best performers: {', '.join([c.split(' - ')[-1] for c in best_by_scenario[:3]])}")
+    
+    st.markdown("---")
+    
+    # --- VISUALIZATIONS ---
+    st.header("📊 Performance Analysis")
+    
+    # Risk/Reward Scatter
+    col_scatter, col_regime = st.columns(2)
+    
+    with col_scatter:
+        st.subheader("Risk vs. Reward")
+        
+        fig_scatter = px.scatter(
+            leaderboard,
+            x='max_drawdown_pct',
+            y='total_return_pct',
+            color='param_set',
+            symbol='symbol',
+            size='total_trades',
+            hover_data=['scenario', 'win_rate', 'sharpe_ratio'],
+            title="Risk/Reward Profile (Target: Top-Left Quadrant)",
+            labels={
+                'max_drawdown_pct': 'Max Drawdown (%)',
+                'total_return_pct': 'Total Return (%)'
+            }
+        )
+        
+        # Add quadrant lines
+        fig_scatter.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+        fig_scatter.add_vline(x=leaderboard['max_drawdown_pct'].median(), line_dash="dash", line_color="gray", opacity=0.5)
+        
+        st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        st.caption("🎯 **Ideal**: High Return, Low Drawdown (Top-Left)")
+    
+    with col_regime:
+        st.subheader("Regime Robustness")
+        
+        # Average return by param set across scenarios
+        regime_perf = leaderboard.groupby(['scenario', 'param_set'])['total_return_pct'].mean().reset_index()
+        
+        fig_regime = px.bar(
+            regime_perf,
+            x='scenario',
+            y='total_return_pct',
+            color='param_set',
+            barmode='group',
+            title="Return % by Scenario (Averaged across symbols)",
+            labels={
+                'total_return_pct': 'Avg Return (%)',
+                'scenario': 'Market Scenario'
+            }
+        )
+        
+        st.plotly_chart(fig_regime, use_container_width=True)
+        
+        st.caption("📈 **Insight**: Which param set is most robust across regimes?")
+    
+    st.markdown("---")
+    
+    # --- DRILL DOWN ---
+    st.header("🔍 Campaign Drill-Down")
+    
+    selected_campaign = st.selectbox(
+        "Select Campaign for Detailed Analysis:",
+        options=results_df['campaign_name'].tolist(),
+        index=0
+    )
+    
+    # Get selected campaign data
+    campaign_data = results_df[results_df['campaign_name'] == selected_campaign].iloc[0]
+    
+    # Display campaign overview
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Return", f"{campaign_data['total_return_pct']:.1f}%")
+    with col2:
+        st.metric("Win Rate", f"{campaign_data['win_rate']:.1%}")
+    with col3:
+        st.metric("Max Drawdown", f"{campaign_data['max_drawdown_pct']:.1f}%")
+    with col4:
+        st.metric("Sharpe Ratio", f"{campaign_data['sharpe_ratio']:.2f}")
+    
+    # Additional metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Trades", campaign_data['total_trades'])
+    with col2:
+        st.metric("Winning Trades", campaign_data['winning_trades'])
+    with col3:
+        st.metric("Avg Win", f"{campaign_data['avg_win_pct']:.1f}%")
+    with col4:
+        st.metric("Avg Loss", f"{campaign_data['avg_loss_pct']:.1f}%")
+    
+    # Trade Log
+    trades = campaign_data.get('trades', [])
+    if trades:
+        st.subheader("📋 Trade Log")
+        
+        trades_df = pd.DataFrame(trades)
+        
+        # Select columns to display
+        display_cols = ['entry_date', 'exit_date', 'entry_price', 'exit_price', 'pnl_pct', 'reason', 'trust_score', 'forecast_confidence']
+        available_cols = [c for c in display_cols if c in trades_df.columns]
+        
+        st.dataframe(
+            trades_df[available_cols],
+            use_container_width=True,
+            height=300
+        )
+        
+        # Trade timeline chart
+        if 'entry_date' in trades_df.columns and 'pnl_pct' in trades_df.columns:
+            st.subheader("📈 Trade Performance Over Time")
+            
+            trades_df['cumulative_return'] = (1 + trades_df['pnl_pct'] / 100).cumprod() - 1
+            trades_df['cumulative_return_pct'] = trades_df['cumulative_return'] * 100
+            
+            fig_timeline = px.line(
+                trades_df,
+                x='entry_date',
+                y='cumulative_return_pct',
+                title="Cumulative Return Over Campaign Period",
+                labels={'cumulative_return_pct': 'Cumulative Return (%)', 'entry_date': 'Date'}
+            )
+            
+            st.plotly_chart(fig_timeline, use_container_width=True)
+    else:
+        st.info("No trade details available for this campaign")
+    
+    # Show raw parameters
+    with st.expander("⚙️ Campaign Parameters"):
+        st.json(campaign_data.get('params', {}))
+    
+    st.stop()  # Don't render the trade analysis dashboard
+
+# --- TRADE ANALYSIS MODE (ORIGINAL DASHBOARD) ---
 df = load_data(MEMORY_FILE)
 
 if df.empty:
