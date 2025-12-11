@@ -13,6 +13,7 @@ from config import AdaptiveParamLoader
 from models.tsfm.inference import ChronosInferenceEngine
 from models.tsfm.schemas import ForecastInput
 from models.trust.filter import TrustFilter
+from models.technical_analysis import add_indicators  # Phase 3: Quality filters
 from reasoning.engine import DeepSeekEngine
 from reasoning.memory import TradeMemory
 from reasoning.schemas import TradeContext, ReasoningDecision, DeepSeekResponse
@@ -211,15 +212,51 @@ class TradeOrchestrator:
         df = self.fetch_data(symbol)
         if df.empty or len(df) < 50:
             return None
-        current_price = float(df['Close'].iloc[-1])
         
-        returns = df['Close'].pct_change().dropna()
+        # Phase 3: Add technical indicators for quality filtering
+        # Normalize column names to lowercase for add_indicators
+        df.columns = df.columns.str.lower()
+        df = add_indicators(df)
+        
+        current_price = float(df['close'].iloc[-1])
+        
+        # Phase 3: HARD QUALITY FILTERS (Fail Fast)
+        latest = df.iloc[-1]
+        
+        # Filter 1: RSI Overbought Check
+        if pd.notna(latest['rsi_14']) and latest['rsi_14'] > 70:
+            logger.info(f"🔴 [STAGE 0] REJECTED: Overbought (RSI={latest['rsi_14']:.1f} > 70)")
+            return TradeDecision(
+                symbol=symbol,
+                decision="REJECT",
+                stage="quality_filter",
+                reason=f"RSI overbought: {latest['rsi_14']:.1f} > 70",
+            )
+        
+        # Filter 2: MACD Momentum Check
+        if pd.notna(latest['macd_hist']) and latest['macd_hist'] < 0:
+            logger.info(f"🔴 [STAGE 0] REJECTED: Negative Momentum (MACD={latest['macd_hist']:.2f} < 0)")
+            return TradeDecision(
+                symbol=symbol,
+                decision="REJECT",
+                stage="quality_filter",
+                reason=f"MACD negative: {latest['macd_hist']:.2f} < 0",
+            )
+        
+        # Log quality filter pass
+        logger.info(
+            f"✅ [STAGE 0] Quality Filters PASSED: "
+            f"RSI={latest['rsi_14']:.1f}, MACD={latest['macd_hist']:.2f}, "
+            f"Volume Ratio={latest['volume_ratio']:.2f}"
+        )
+        
+        returns = df['close'].pct_change().dropna()
         current_vol = float(returns.std() * np.sqrt(24))
 
         # --- STAGE 1: FORECAST ---
         logger.info(f"[STAGE 1] 🔮 Generating forecast for {symbol}...")
         try:
-            series = [x for x in df['Close'].tolist() if not (isinstance(x, float) and (np.isnan(x) or np.isinf(x)))]
+            series = [x for x in df['close'].tolist() if not (isinstance(x, float) and (np.isnan(x) or np.isinf(x)))]
             
             # Create ForecastInput
             forecast_input = ForecastInput(
@@ -345,11 +382,16 @@ class TradeOrchestrator:
         # Use RegimeTracker's get_prompt_context() method for formatted context
         macro_context = self.regime_tracker.get_prompt_context()
         
-        # Inject News and Memory Narratives into Context (with Global Data Lake insights)
+        # Inject News, Memory, and Technical Indicators into Context (Phase 3)
         full_memory_context = (
             f"{memory_str}\n\n"
             f"{precedent_summary}\n\n"
             f"MACRO CONTEXT:\n{macro_context}\n\n"
+            f"--- PHASE 3: TECHNICAL INDICATORS ---\n"
+            f"RSI(14): {latest['rsi_14']:.1f} (Overbought if > 70)\n"
+            f"MACD Histogram: {latest['macd_hist']:.2f} (Positive = Bullish Momentum)\n"
+            f"Volume Ratio: {latest['volume_ratio']:.2f}x (vs 20-day avg)\n"
+            f"Trend SMA: {latest['trend_sma']:.2f} (Price vs 50-day MA)\n\n"
             f"--- PERCEPTION LAYER INSIGHTS ---\n"
             f"NEWS SENTIMENT: {news_digest.sentiment.value} (Impact: {news_digest.impact_level.value})\n"
             f"NEWS SUMMARY: {news_digest.summary}\n\n"
