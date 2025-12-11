@@ -30,6 +30,11 @@ else:
 
 st.sidebar.info(f"Reading from: `{MEMORY_FILE}`")
 
+# Add refresh button to clear cache
+if st.sidebar.button("🔄 Refresh Data", help="Clear cache and reload data"):
+    st.cache_data.clear()
+    st.rerun()
+
 
 @st.cache_data(ttl=5)
 def load_data(filepath):
@@ -52,8 +57,46 @@ def load_data(filepath):
     if not trades:
         return pd.DataFrame()
     
-    # Convert to DataFrame
+    # Convert to DataFrame - ensure all trades have consistent structure
+    # Force post_mortem column to exist even if sparse
+    # Also extract post_mortem fields BEFORE creating DataFrame to ensure they're preserved
+    postmortem_data = {}
+    for trade in trades:
+        if 'post_mortem' not in trade:
+            trade['post_mortem'] = None
+        else:
+            # Extract post-mortem fields immediately while we have the dict
+            trade_id = trade.get('trade_id')
+            if trade_id and trade.get('post_mortem'):
+                pm = trade.get('post_mortem')
+                if isinstance(pm, dict):
+                    postmortem_data[trade_id] = {
+                        'outcome_category': pm.get('outcome_category'),
+                        'root_cause': pm.get('root_cause'),
+                        'lesson_learned': pm.get('lesson_learned'),
+                        'adjusted_confidence': pm.get('adjusted_confidence'),
+                        'postmortem_outcome': pm.get('actual_outcome')
+                    }
+    
     df = pd.DataFrame(trades)
+    
+    # Apply extracted post-mortem data to DataFrame
+    if postmortem_data:
+        df['outcome_category'] = df['trade_id'].map(lambda tid: postmortem_data.get(tid, {}).get('outcome_category'))
+        df['root_cause'] = df['trade_id'].map(lambda tid: postmortem_data.get(tid, {}).get('root_cause'))
+        df['lesson_learned'] = df['trade_id'].map(lambda tid: postmortem_data.get(tid, {}).get('lesson_learned'))
+        df['adjusted_confidence'] = df['trade_id'].map(lambda tid: postmortem_data.get(tid, {}).get('adjusted_confidence'))
+        df['postmortem_outcome'] = df['trade_id'].map(lambda tid: postmortem_data.get(tid, {}).get('postmortem_outcome'))
+        # Convert adjusted_confidence to numeric
+        df['adjusted_confidence'] = pd.to_numeric(df['adjusted_confidence'], errors='coerce')
+        st.sidebar.success(f"📊 {len(postmortem_data)} trades with post-mortem data")
+    else:
+        # Initialize empty columns if no post-mortems
+        df['outcome_category'] = None
+        df['root_cause'] = None
+        df['lesson_learned'] = None
+        df['adjusted_confidence'] = None
+        df['postmortem_outcome'] = None
     
     # Ensure numeric columns
     if 'confidence' in df.columns:
@@ -76,6 +119,8 @@ def load_data(filepath):
     else:
         df['outcome_type'] = None
     
+    # Post-mortem fields are already extracted above, so we don't need to do it again here
+    
     return df
 
 
@@ -84,6 +129,29 @@ df = load_data(MEMORY_FILE)
 if df.empty:
     st.warning(f"No data found in {MEMORY_FILE}. Run the bot to generate memory!")
     st.stop()
+
+# Debug info in sidebar (after df is loaded)
+with st.sidebar.expander("🔍 Debug Info"):
+    st.write(f"Total trades: {len(df)}")
+    if 'post_mortem' in df.columns:
+        pm_count = df['post_mortem'].notna().sum()
+        st.write(f"Trades with post_mortem: {pm_count}")
+        if pm_count > 0:
+            # Show sample
+            sample_pm = df[df['post_mortem'].notna()]['post_mortem'].iloc[0]
+            if isinstance(sample_pm, dict):
+                st.write(f"Sample post_mortem keys: {list(sample_pm.keys())}")
+    if 'outcome_category' in df.columns:
+        cat_count = df['outcome_category'].notna().sum()
+        st.write(f"Trades with outcome_category: {cat_count}")
+        if cat_count > 0:
+            st.write("Categories:", df['outcome_category'].value_counts().to_dict())
+    # Show has_postmortem check result
+    has_postmortem_check = (
+        ('post_mortem' in df.columns and df['post_mortem'].notna().any()) or
+        ('outcome_category' in df.columns and df['outcome_category'].notna().any())
+    )
+    st.write(f"has_postmortem check: {has_postmortem_check}")
 
 # --- KPI ROW ---
 col1, col2, col3, col4 = st.columns(4)
@@ -193,4 +261,128 @@ st.dataframe(
     df_display,
     use_container_width=True
 )
+
+# --- LESSONS LEARNED SECTION ---
+# Check for post-mortem data - look for either outcome_category column or post_mortem column
+has_postmortem = (
+    ('post_mortem' in df.columns and df['post_mortem'].notna().any()) or
+    ('outcome_category' in df.columns and df['outcome_category'].notna().any())
+)
+
+if has_postmortem:
+    st.header("📚 Lessons Learned")
+    
+    # Filter trades with post-mortem data
+    if 'outcome_category' in df.columns:
+        postmortem_trades = df[df['outcome_category'].notna()].copy()
+    elif 'post_mortem' in df.columns:
+        # Extract outcome_category from post_mortem if not already extracted
+        postmortem_trades = df[df['post_mortem'].notna()].copy()
+        if 'outcome_category' not in postmortem_trades.columns:
+            postmortem_trades['outcome_category'] = postmortem_trades['post_mortem'].apply(
+                lambda x: x.get('outcome_category') if isinstance(x, dict) else None
+            )
+    else:
+        postmortem_trades = pd.DataFrame()
+    
+    if not postmortem_trades.empty:
+        # Accuracy of Conviction Metric
+        st.subheader("Accuracy of Conviction")
+        
+        # Calculate correlation between adjusted_confidence and actual outcome
+        # Convert outcome to numeric: WIN=1, LOSS=-1, BREAKEVEN=0
+        def outcome_to_numeric(outcome_str):
+            if pd.isna(outcome_str):
+                return None
+            outcome_upper = str(outcome_str).upper()
+            if 'WIN' in outcome_upper or 'PROFIT' in outcome_upper:
+                return 1.0
+            elif 'LOSS' in outcome_upper:
+                return -1.0
+            else:
+                return 0.0
+        
+        postmortem_trades['outcome_numeric'] = postmortem_trades['postmortem_outcome'].apply(outcome_to_numeric)
+        
+        # Filter for trades with both adjusted_confidence and outcome_numeric
+        valid_for_correlation = postmortem_trades[
+            postmortem_trades['adjusted_confidence'].notna() & 
+            postmortem_trades['outcome_numeric'].notna()
+        ]
+        
+        if len(valid_for_correlation) > 1:
+            correlation = valid_for_correlation['adjusted_confidence'].corr(valid_for_correlation['outcome_numeric'])
+            if pd.notna(correlation):
+                st.metric(
+                    "Confidence-Outcome Correlation",
+                    f"{correlation:.3f}",
+                    help="Correlation between adjusted_confidence and actual outcome. Higher = better calibration."
+                )
+            else:
+                st.info("Insufficient data to calculate correlation.")
+        else:
+            st.info("Need at least 2 trades with both adjusted_confidence and outcome to calculate correlation.")
+        
+        # Hall of Shame/Fame
+        col_shame, col_fame = st.columns(2)
+        
+        with col_shame:
+            st.subheader("🏆 Hall of Shame (Model Hallucinations)")
+            hallucinations = postmortem_trades[
+                postmortem_trades['outcome_category'] == 'MODEL_HALLUCINATION'
+            ].copy()
+            
+            if not hallucinations.empty:
+                shame_cols = ['timestamp', 'symbol', 'root_cause', 'lesson_learned', 'pnl']
+                available_shame = [c for c in shame_cols if c in hallucinations.columns]
+                st.dataframe(
+                    hallucinations[available_shame].sort_values('timestamp', ascending=False) if 'timestamp' in hallucinations.columns else hallucinations[available_shame],
+                    use_container_width=True,
+                    height=300
+                )
+                st.caption(f"Total: {len(hallucinations)} trades")
+            else:
+                st.info("No model hallucinations detected. 🎉")
+        
+        with col_fame:
+            st.subheader("🎲 Hall of Fame (Lucky Wins)")
+            lucky_wins = postmortem_trades[
+                postmortem_trades['outcome_category'] == 'LUCK'
+            ].copy()
+            
+            if not lucky_wins.empty:
+                fame_cols = ['timestamp', 'symbol', 'root_cause', 'lesson_learned', 'pnl']
+                available_fame = [c for c in fame_cols if c in lucky_wins.columns]
+                st.dataframe(
+                    lucky_wins[available_fame].sort_values('timestamp', ascending=False) if 'timestamp' in lucky_wins.columns else lucky_wins[available_fame],
+                    use_container_width=True,
+                    height=300
+                )
+                st.caption(f"Total: {len(lucky_wins)} trades")
+            else:
+                st.info("No lucky wins detected.")
+        
+        # Breakdown by Outcome Category
+        st.subheader("Outcome Category Breakdown")
+        category_counts = postmortem_trades['outcome_category'].value_counts()
+        
+        if not category_counts.empty:
+            fig_categories = px.bar(
+                x=category_counts.index,
+                y=category_counts.values,
+                title="Distribution of Outcome Categories",
+                labels={'x': 'Outcome Category', 'y': 'Count'}
+            )
+            st.plotly_chart(fig_categories, use_container_width=True)
+            
+            # Show summary table
+            category_summary = postmortem_trades.groupby('outcome_category').agg({
+                'pnl': ['count', 'mean', 'sum'],
+                'adjusted_confidence': 'mean'
+            }).round(3)
+            st.dataframe(category_summary, use_container_width=True)
+    else:
+        st.info("No post-mortem data available. Run the reviewer daemon to generate analysis.")
+else:
+    st.info("💡 Post-mortem analysis not yet available. Run `python daemon/reviewer.py` to generate lessons learned.")
 
