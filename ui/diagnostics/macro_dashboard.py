@@ -440,3 +440,4 @@ with st.expander("🔍 How to Use This Dashboard"):
 st.markdown("---")
 st.caption("FuggerBot v2.0 - Global Data Lake Diagnostics | Powered by DuckDB + Streamlit")
 
+
