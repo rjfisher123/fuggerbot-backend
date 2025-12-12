@@ -1,11 +1,11 @@
 """
-FuggerBot v2.5 - Unified System Launcher
+FuggerBot v2.8 - Unified System Launcher
 
 Starts all FuggerBot components in a single command:
-- Main Dashboard (port 8501)
-- Macro Dashboard (port 8502)
+- FuggerBot Commander (unified navigation interface on port 8501)
 - Optimization Scheduler (daemon mode)
 - Live Trading Bot (continuous mode)
+- Trade Reviewer (post-mortem analysis)
 
 Usage:
     python launcher.py
@@ -13,7 +13,7 @@ Usage:
 Press Ctrl+C to stop all services.
 
 Author: FuggerBot AI Team
-Version: v2.5 - Operation Autopilot
+Version: v2.8 - Unified Navigation
 """
 import subprocess
 import sys
@@ -49,7 +49,7 @@ def cleanup_ports():
     
     This prevents "Port already in use" errors from previous runs.
     """
-    ports = [8501, 8502]
+    ports = [8501]  # Only need to clean up the unified commander port
     for port in ports:
         try:
             # Find processes using the port
@@ -134,38 +134,31 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     print("="*50)
-    print("   🚀 FUGGERBOT V2.5 - UNIFIED LAUNCHER")
+    print("   🚀 FUGGERBOT V2.8 - UNIFIED LAUNCHER")
     print("="*50)
 
-    # 1. Start Dashboard (Streamlit)
+    # 1. Start FuggerBot Commander (Unified Navigation Interface)
     start_process(
-        ["streamlit", "run", "tools/dashboard.py", "--server.port", "8501", "--server.headless", "true"],
-        "Dashboard",
-        f"{LOG_DIR}/dashboard.log"
+        ["streamlit", "run", "fuggerbot_commander.py", "--server.port", "8501", "--server.headless", "true"],
+        "FuggerBot Commander",
+        f"{LOG_DIR}/commander.log"
     )
 
-    # 2. Start Macro Dashboard (Optional, on port 8502)
-    start_process(
-        ["streamlit", "run", "ui/diagnostics/macro_dashboard.py", "--server.port", "8502", "--server.headless", "true"],
-        "Macro Dashboard",
-        f"{LOG_DIR}/macro_dashboard.log"
-    )
-
-    # 3. Start Optimization Scheduler (The Brain)
+    # 2. Start Optimization Scheduler (The Brain)
     start_process(
         ["python", "daemon/optimization_scheduler.py", "--mode", "daemon"],
         "Optimization Scheduler",
         f"{LOG_DIR}/scheduler.log"
     )
 
-    # 4. Start Live Trading Bot (The Executioner)
+    # 3. Start Live Trading Bot (The Executioner)
     start_process(
         ["python", "run_bot.py", "--continuous", "--interval", "60"],
         "Trading Bot",
         f"{LOG_DIR}/bot.log"
     )
     
-    # 5. Start Trade Reviewer (Post-Mortem Analysis)
+    # 4. Start Trade Reviewer (Post-Mortem Analysis)
     start_process(
         ["python", "daemon/reviewer.py"],
         "Trade Reviewer",
@@ -173,8 +166,10 @@ def main():
     )
 
     print("\n✅ SYSTEM OPERATIONAL")
-    print(f"📊 Main Dashboard:  http://localhost:8501")
-    print(f"🌍 Macro Dashboard: http://localhost:8502")
+    print(f"🤖 FuggerBot Commander:  http://localhost:8501")
+    print(f"   └─ Mission Control (Main Operations, Macro View)")
+    print(f"   └─ Deep Diagnostics (Agent Chain, Hallucinations, Regime Params)")
+    print(f"   └─ Trade Forensics (FOMO, Pain, What-If)")
     print(f"📝 Logs located in /{LOG_DIR} directory")
     print("Press Ctrl+C to stop all services.\n")
 
