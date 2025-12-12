@@ -58,6 +58,87 @@ with col3:
 
 st.markdown("---")
 
+# === TASK C: PARAMETER DIVERSITY MONITOR ===
+st.header("🏥 Configuration Health Check")
+st.caption("Verifying that different assets use distinct strategies")
+
+# Import adaptive loader to get current parameters
+try:
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from config.adaptive_loader import AdaptiveParamLoader
+    
+    loader = AdaptiveParamLoader()
+    
+    # Get current regime (use first regime from data as proxy)
+    current_regime = df['regime'].iloc[0] if len(df) > 0 else "Unknown"
+    
+    # Get params for BTC-USD and NVDA
+    btc_params = loader.get_optimized_params("BTC-USD", current_regime)
+    nvda_params = loader.get_optimized_params("NVDA", current_regime)
+    
+    # Compare parameters
+    params_to_compare = ['trust_threshold', 'min_confidence', 'max_position_size', 'stop_loss', 'take_profit']
+    
+    differences = []
+    for param in params_to_compare:
+        btc_val = btc_params.get(param, 0)
+        nvda_val = nvda_params.get(param, 0)
+        if btc_val != nvda_val:
+            differences.append(param)
+    
+    # Display health status
+    if len(differences) >= 2:  # At least 2 params differ
+        st.success(
+            f"✅ **Adaptive Diversity Active:** BTC-USD and NVDA use distinct strategies "
+            f"({len(differences)}/5 parameters differ)"
+        )
+    elif len(differences) == 0:
+        st.error(
+            "⚠️ **Diversity Warning:** BTC-USD and NVDA have IDENTICAL parameters! "
+            "Possible fallback to defaults. Check optimizer output."
+        )
+    else:
+        st.warning(
+            f"⚙️ **Partial Diversity:** Only {len(differences)}/5 parameters differ. "
+            "Consider re-running optimizer."
+        )
+    
+    # Side-by-side comparison table
+    st.subheader("📊 Parameter Comparison: BTC-USD vs NVDA")
+    
+    comparison_data = {
+        'Parameter': params_to_compare,
+        'BTC-USD': [btc_params.get(p, 0) for p in params_to_compare],
+        'NVDA': [nvda_params.get(p, 0) for p in params_to_compare],
+        'Difference': [abs(btc_params.get(p, 0) - nvda_params.get(p, 0)) for p in params_to_compare]
+    }
+    
+    comparison_df = pd.DataFrame(comparison_data)
+    
+    # Highlight rows with differences
+    def highlight_differences(row):
+        if row['Difference'] > 0.01:  # Threshold for "different"
+            return ['background-color: lightgreen'] * len(row)
+        else:
+            return ['background-color: lightyellow'] * len(row)
+    
+    styled_comparison = comparison_df.style.apply(highlight_differences, axis=1).format({
+        'BTC-USD': '{:.3f}',
+        'NVDA': '{:.3f}',
+        'Difference': '{:.3f}'
+    })
+    
+    st.dataframe(styled_comparison, use_container_width=True)
+    
+    st.caption("💡 **Green rows** = Parameters differ (good!), **Yellow rows** = Parameters identical (potential issue)")
+    
+except Exception as e:
+    st.warning(f"Could not load adaptive loader: {e}")
+    st.info("Skipping diversity check")
+
+st.markdown("---")
+
 # === SECTION 1: Parameter Heatmap ===
 st.header("📊 Parameter Heatmap by Symbol + Regime")
 

@@ -60,29 +60,51 @@ if df_with_pm.empty:
     st.warning("No trades have been reviewed yet!")
     st.stop()
 
-# Extract outcome_category from post_mortem dict
+# === TASK B: ERROR TAXONOMY ===
+# Extract outcome_category and error type from post_mortem dict
 df_with_pm['outcome_category'] = df_with_pm['post_mortem'].apply(
     lambda x: x.get('outcome_category', 'UNKNOWN') if isinstance(x, dict) else 'UNKNOWN'
 )
 
-# Filter to hallucinations
-df_halluc = df_with_pm[df_with_pm['outcome_category'] == 'MODEL_HALLUCINATION'].copy()
+# Detect infrastructure failures from rationale
+df_with_pm['error_type'] = 'NONE'
+if 'llm_response' in df.columns:
+    df_with_pm['error_type'] = df_with_pm['llm_response'].apply(
+        lambda x: 'INFRASTRUCTURE' if isinstance(x, dict) and '[INFRASTRUCTURE_FAIL]' in str(x.get('rationale', ''))
+        else 'COGNITIVE' if isinstance(x, dict) and '[LOGIC_FAIL]' in str(x.get('rationale', ''))
+        else 'NONE'
+    )
 
-# Overview metrics
+# Filter to failures
+df_halluc_all = df_with_pm[df_with_pm['outcome_category'] == 'MODEL_HALLUCINATION'].copy()
+
+# Split into infrastructure vs cognitive failures
+df_infrastructure = df_halluc_all[df_halluc_all['error_type'] == 'INFRASTRUCTURE'].copy()
+df_cognitive = df_halluc_all[df_halluc_all['error_type'] == 'COGNITIVE'].copy()
+
+# Overview metrics (exclude infrastructure from hallucination rate)
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Total Trades", len(df))
 with col2:
     st.metric("Reviewed Trades", len(df_with_pm))
 with col3:
-    halluc_count = len(df_halluc)
-    st.metric("Hallucinations", halluc_count)
+    cognitive_count = len(df_cognitive)
+    st.metric("Cognitive Failures", cognitive_count, help="True LLM hallucinations")
 with col4:
     if len(df_with_pm) > 0:
-        halluc_rate = halluc_count / len(df_with_pm)
-        st.metric("Hallucination Rate", f"{halluc_rate:.1%}")
+        # Exclude infrastructure failures from hallucination rate
+        true_halluc_rate = cognitive_count / len(df_with_pm)
+        st.metric("True Hallucination Rate", f"{true_halluc_rate:.1%}", 
+                 help="Excludes infrastructure failures")
     else:
-        st.metric("Hallucination Rate", "N/A")
+        st.metric("True Hallucination Rate", "N/A")
+
+# Show infrastructure failure count separately
+if len(df_infrastructure) > 0:
+    st.warning(f"⚠️ **{len(df_infrastructure)} Infrastructure Failures** detected (API errors, auth issues, timeouts)")
+else:
+    st.success("✅ No infrastructure failures detected")
 
 st.markdown("---")
 
@@ -102,84 +124,91 @@ st.plotly_chart(fig_outcomes, use_container_width=True)
 
 st.markdown("---")
 
-# === SECTION 2: Hallucination Analysis ===
-if not df_halluc.empty:
-    st.header("🔴 Hallucination Deep Dive")
+# === SECTION 2: Failure Analysis (SPLIT INTO TABS) ===
+if not df_halluc_all.empty:
+    st.header("🔴 Failure Analysis")
     
-    st.subheader(f"Found {len(df_halluc)} Hallucination Cases")
+    # Create tabs for different failure types
+    tab1, tab2, tab3 = st.tabs([
+        f"🧠 Cognitive Failures ({len(df_cognitive)})",
+        f"🔧 Infrastructure Failures ({len(df_infrastructure)})",
+        "📊 Combined Analysis"
+    ])
     
-    # Extract root causes
-    df_halluc['root_cause'] = df_halluc['post_mortem'].apply(
-        lambda x: x.get('root_cause', 'Unknown') if isinstance(x, dict) else 'Unknown'
-    )
+    # === TAB 1: COGNITIVE FAILURES (True LLM Hallucinations) ===
+    with tab1:
+        if not df_cognitive.empty:
+            st.subheader(f"True LLM Hallucinations ({len(df_cognitive)} cases)")
+            st.caption("These are actual model failures, not infrastructure issues")
+            
+            # Extract root causes
+            df_cognitive['root_cause'] = df_cognitive['post_mortem'].apply(
+                lambda x: x.get('root_cause', 'Unknown') if isinstance(x, dict) else 'Unknown'
+            )
+            
+            # Root cause distribution
+            root_causes = df_cognitive['root_cause'].value_counts()
+            
+            fig_causes = px.bar(
+                x=root_causes.index,
+                y=root_causes.values,
+                labels={'x': 'Root Cause', 'y': 'Count'},
+                title="Cognitive Failure Patterns"
+            )
+            st.plotly_chart(fig_causes, use_container_width=True)
+            
+            # Table
+            display_cols = ['timestamp', 'symbol', 'decision', 'root_cause']
+            if 'price' in df_cognitive.columns:
+                display_cols.append('price')
+            
+            cog_display = df_cognitive[display_cols].copy()
+            cog_display['timestamp'] = pd.to_datetime(cog_display['timestamp']).dt.strftime('%Y-%m-%d %H:%M')
+            st.dataframe(cog_display, use_container_width=True, height=250)
+        else:
+            st.success("✅ No cognitive failures detected! LLM reasoning quality is strong.")
     
-    # Root cause distribution
-    root_causes = df_halluc['root_cause'].value_counts()
+    # === TAB 2: INFRASTRUCTURE FAILURES ===
+    with tab2:
+        if not df_infrastructure.empty:
+            st.subheader(f"Infrastructure Issues ({len(df_infrastructure)} cases)")
+            st.caption("API errors, auth failures, timeouts - not model quality issues")
+            
+            # Extract error types from rationale
+            if 'llm_response' in df_infrastructure.columns:
+                df_infrastructure['error_detail'] = df_infrastructure['llm_response'].apply(
+                    lambda x: str(x.get('rationale', 'Unknown'))[:100] if isinstance(x, dict) else 'Unknown'
+                )
+            
+            # Table
+            display_cols = ['timestamp', 'symbol']
+            if 'error_detail' in df_infrastructure.columns:
+                display_cols.append('error_detail')
+            
+            infra_display = df_infrastructure[display_cols].copy()
+            infra_display['timestamp'] = pd.to_datetime(infra_display['timestamp']).dt.strftime('%Y-%m-%d %H:%M')
+            st.dataframe(infra_display, use_container_width=True, height=250)
+            
+            st.info("💡 **Action:** Check API keys, rate limits, and network connectivity")
+        else:
+            st.success("✅ No infrastructure failures! API and authentication working correctly.")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Root Cause Frequency")
-        fig_causes = px.bar(
-            x=root_causes.index,
-            y=root_causes.values,
-            labels={'x': 'Root Cause', 'y': 'Count'},
-            title="Common Hallucination Patterns"
-        )
-        st.plotly_chart(fig_causes, use_container_width=True)
-    
-    with col2:
-        st.subheader("Symbol Distribution")
-        symbol_counts = df_halluc['symbol'].value_counts()
-        fig_symbols = px.bar(
-            x=symbol_counts.index,
-            y=symbol_counts.values,
-            labels={'x': 'Symbol', 'y': 'Hallucination Count'},
-            title="Hallucinations by Symbol"
-        )
-        st.plotly_chart(fig_symbols, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # === SECTION 3: Hallucination Table ===
-    st.subheader("📋 Hallucination Cases")
-    
-    display_cols = ['timestamp', 'symbol', 'decision', 'root_cause']
-    if 'price' in df_halluc.columns:
-        display_cols.append('price')
-    
-    halluc_display = df_halluc[display_cols].copy()
-    halluc_display['timestamp'] = pd.to_datetime(halluc_display['timestamp']).dt.strftime('%Y-%m-%d %H:%M')
-    
-    st.dataframe(halluc_display, use_container_width=True, height=300)
-    
-    st.markdown("---")
-    
-    # === SECTION 4: Detailed Case Analysis ===
-    st.subheader("🔬 Case-by-Case Analysis")
-    
-    selected_halluc_idx = st.selectbox(
-        "Select Hallucination Case:",
-        range(len(df_halluc)),
-        format_func=lambda x: f"{df_halluc.iloc[x]['timestamp'][:10]} | "
-                              f"{df_halluc.iloc[x]['symbol']} | "
-                              f"{df_halluc.iloc[x]['root_cause']}"
-    )
-    
-    selected_halluc = df_halluc.iloc[selected_halluc_idx]
-    selected_pm = selected_halluc['post_mortem']
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("Root Cause", selected_pm.get('root_cause', 'Unknown'))
-        st.metric("Outcome Category", selected_pm.get('outcome_category', 'Unknown'))
+    # === TAB 3: COMBINED ANALYSIS ===
+    with tab3:
+        st.subheader("All Failures Combined")
         
-    with col2:
-        st.metric("Adjusted Confidence", f"{selected_pm.get('adjusted_confidence', 0):.2f}")
-        st.metric("Actual Outcome", selected_pm.get('actual_outcome', 'Unknown'))
-    
-    st.text_area("Lesson Learned:", selected_pm.get('lesson_learned', 'No lesson recorded'), height=150)
+        # Combined table
+        df_halluc_all['root_cause'] = df_halluc_all['post_mortem'].apply(
+            lambda x: x.get('root_cause', 'Unknown') if isinstance(x, dict) else 'Unknown'
+        )
+        
+        display_cols = ['timestamp', 'symbol', 'error_type', 'root_cause']
+        if 'price' in df_halluc_all.columns:
+            display_cols.append('price')
+        
+        all_display = df_halluc_all[display_cols].copy()
+        all_display['timestamp'] = pd.to_datetime(all_display['timestamp']).dt.strftime('%Y-%m-%d %H:%M')
+        st.dataframe(all_display, use_container_width=True, height=300)
     
     # Show LLM response if available
     if 'llm_response' in selected_halluc and selected_halluc['llm_response']:

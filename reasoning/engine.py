@@ -338,12 +338,16 @@ class DeepSeekEngine:
                 logger.error("RAW CONTENT END")
             logger.error("="*40)
             
+            # === TASK B: ERROR TAXONOMY ===
+            # This is a LOGIC_FAIL - LLM returned content but we couldn't parse it
+            error_prefix = "[LOGIC_FAIL]"
+            
             # Create error response but still preserve proposer_confidence if we have it
             error_response = DeepSeekResponse(
                 decision=ReasoningDecision.REJECT,
                 confidence=1.0,
                 risk_analysis="System Error: Parsing Failed",
-                rationale=f"Error parsing LLM response. Check logs for raw output."
+                rationale=f"{error_prefix} Error parsing LLM response. Check logs for raw output."
             )
             # Preserve proposer_confidence if it was set before the error, otherwise use error confidence
             if proposer_confidence is not None:
@@ -357,12 +361,30 @@ class DeepSeekEngine:
             return error_response
         except Exception as e:
             logger.error(f"Critical API Error: {e}", exc_info=True)
+            
+            # === TASK B: ERROR TAXONOMY ===
+            # Detect infrastructure failures vs other errors
+            error_str = str(e).lower()
+            is_infrastructure_fail = any([
+                '403' in error_str,  # Forbidden
+                '401' in error_str,  # Unauthorized
+                '429' in error_str,  # Rate limit
+                'api key' in error_str,
+                'authentication' in error_str,
+                'rate limit' in error_str,
+                'empty response' in error_str,
+                'connection' in error_str,
+                'timeout' in error_str
+            ])
+            
+            error_prefix = "[INFRASTRUCTURE_FAIL]" if is_infrastructure_fail else "[LOGIC_FAIL]"
+            
             # Return error response with metrics if available
             error_response = DeepSeekResponse(
                 decision=ReasoningDecision.REJECT,
                 confidence=0.0,
                 risk_analysis="System Error: API call failed",
-                rationale=f"Error: {str(e)}"
+                rationale=f"{error_prefix} Error: {str(e)}"
             )
             if proposer_confidence is not None:
                 error_response.proposer_confidence = proposer_confidence

@@ -62,8 +62,23 @@ if df_with_trm.empty:
     st.warning("No trades with TRM details yet!")
     st.stop()
 
+# === TASK A: CALCULATE CRITIC ACTIVITY ===
+# Extract proposer and final confidence for critic analysis
+df_with_trm['proposer_confidence'] = df_with_trm['trm_details'].apply(
+    lambda x: x.get('waterfall_steps', {}).get('llm_confidence', 0) if isinstance(x, dict) else 0
+)
+df_with_trm['final_confidence'] = df_with_trm['trm_details'].apply(
+    lambda x: x.get('waterfall_steps', {}).get('final_confidence', 0) if isinstance(x, dict) else 0
+)
+df_with_trm['critic_delta'] = df_with_trm['proposer_confidence'] - df_with_trm['final_confidence']
+df_with_trm['critic_active'] = df_with_trm['critic_delta'] > 0.1
+
+# Calculate critic activity metrics
+critic_active_count = df_with_trm['critic_active'].sum()
+critic_activity_rate = critic_active_count / len(df_with_trm) if len(df_with_trm) > 0 else 0
+
 # Overview metrics
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Total Trades", len(df))
 with col2:
@@ -71,6 +86,16 @@ with col2:
 with col3:
     approved = (df['decision'] == 'APPROVE').sum()
     st.metric("Approved Rate", f"{approved/len(df):.1%}")
+with col4:
+    st.metric("Critic Active", critic_active_count, delta=f"{critic_activity_rate:.1%}")
+
+# === ACTIVE CRITIC ALERT ===
+if critic_active_count > 0:
+    avg_critic_delta = df_with_trm[df_with_trm['critic_active']]['critic_delta'].mean()
+    st.info(
+        f"💡 **Critic Active:** {critic_active_count} trades where Critic adjusted confidence by "
+        f">{0.1:.0%} (Avg adjustment: {avg_critic_delta:.1%})"
+    )
 
 st.markdown("---")
 
@@ -92,6 +117,15 @@ selected_idx = st.selectbox(
 
 trade = df_with_trm.iloc[selected_idx]
 trm = trade.get('trm_details', {})
+
+# === CRITIC ACTIVITY ALERT FOR THIS TRADE ===
+if trade.get('critic_active', False):
+    critic_delta = trade.get('critic_delta', 0)
+    st.warning(
+        f"🧠 **CRITIC WAS ACTIVE ON THIS TRADE!** Reduced confidence by {critic_delta:.1%} "
+        f"(Proposer: {trade.get('proposer_confidence', 0):.2f} → "
+        f"Final: {trade.get('final_confidence', 0):.2f})"
+    )
 
 # Display trade overview
 col1, col2, col3, col4 = st.columns(4)
