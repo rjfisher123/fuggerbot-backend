@@ -237,7 +237,12 @@ class AdaptiveParamLoader:
         """
         return self._params.get("defaults", DEFAULT_PARAMS).copy()
     
-    def get_optimized_params(self, symbol: str, regime_name: str) -> Dict[str, Any]:
+    def get_optimized_params(
+        self, 
+        symbol: str, 
+        regime_name: str,
+        discovery_mode: bool = False
+    ) -> Dict[str, Any]:
         """
         Get optimized parameters from War Games results for a specific symbol and regime.
         
@@ -247,6 +252,7 @@ class AdaptiveParamLoader:
         Args:
             symbol: Trading symbol (e.g., "BTC-USD", "NVDA")
             regime_name: Current market regime name (e.g., "Tech bounce back")
+            discovery_mode: If True, use looser thresholds to ensure trade activity
         
         Returns:
             Dictionary with optimized parameters:
@@ -304,25 +310,56 @@ class AdaptiveParamLoader:
             
             if best_match:
                 params = best_match.get('best_params', {})
+                
+                # === CRITICAL FIX: DISCOVERY MODE ===
+                # If discovery_mode is enabled, loosen thresholds to ensure liveliness
+                if discovery_mode:
+                    logger.warning(
+                        f"🔍 DISCOVERY MODE: Loosening thresholds for {symbol} to ensure trade activity"
+                    )
+                    params = {
+                        "trust_threshold": max(0.50, params.get("trust_threshold", 0.65) * 0.8),
+                        "min_confidence": max(0.60, params.get("min_confidence", 0.75) * 0.8),
+                        "max_position_size": params.get("max_position_size", 0.10),
+                        "stop_loss": params.get("stop_loss", 0.05),
+                        "take_profit": params.get("take_profit", 0.15),
+                        "cooldown_days": params.get("cooldown_days", 2.0)
+                    }
+                
                 logger.info(
                     f"✅ Loaded optimized params for {symbol} in '{regime_name}': "
                     f"Strategy='{best_match.get('best_strategy_name', 'Unknown')}', "
                     f"Score={best_match.get('score', 0):.1f}"
+                    + (" (Discovery Mode)" if discovery_mode else "")
                 )
                 return params
             else:
                 logger.warning(
                     f"No optimized params found for {symbol} in '{regime_name}', "
-                    f"using conservative fallback"
+                    f"using {'discovery' if discovery_mode else 'conservative'} fallback"
                 )
-                return {
-                    "trust_threshold": 0.75,
-                    "min_confidence": 0.80,
-                    "max_position_size": 0.05,
-                    "stop_loss": 0.03,
-                    "take_profit": 0.10,
-                    "cooldown_days": 2.0
-                }
+                
+                # === CRITICAL FIX: DISCOVERY MODE FALLBACK ===
+                if discovery_mode:
+                    # Looser params to ensure system liveliness
+                    return {
+                        "trust_threshold": 0.50,
+                        "min_confidence": 0.60,
+                        "max_position_size": 0.08,
+                        "stop_loss": 0.05,
+                        "take_profit": 0.12,
+                        "cooldown_days": 1.0
+                    }
+                else:
+                    # Conservative params (original behavior)
+                    return {
+                        "trust_threshold": 0.75,
+                        "min_confidence": 0.80,
+                        "max_position_size": 0.05,
+                        "stop_loss": 0.03,
+                        "take_profit": 0.10,
+                        "cooldown_days": 2.0
+                    }
                 
         except Exception as e:
             logger.error(f"Error loading optimized params: {e}, using conservative fallback")
