@@ -364,269 +364,268 @@ if view_mode == "War Games Results":
     # Show raw parameters
     with st.expander("⚙️ Campaign Parameters"):
         st.json(campaign_data.get('params', {}))
+
+else:
+    # --- TRADE ANALYSIS MODE (ORIGINAL DASHBOARD) ---
+    df = load_data(MEMORY_FILE)
+
+    if df.empty:
+        st.warning(f"No data found in {MEMORY_FILE}. Run the bot to generate memory!")
+        st.stop()
+
+    # Debug info in sidebar (after df is loaded)
+    with st.sidebar.expander("🔍 Debug Info"):
+        st.write(f"Total trades: {len(df)}")
+        if 'post_mortem' in df.columns:
+            pm_count = df['post_mortem'].notna().sum()
+            st.write(f"Trades with post_mortem: {pm_count}")
+            if pm_count > 0:
+                # Show sample
+                sample_pm = df[df['post_mortem'].notna()]['post_mortem'].iloc[0]
+                if isinstance(sample_pm, dict):
+                    st.write(f"Sample post_mortem keys: {list(sample_pm.keys())}")
+        if 'outcome_category' in df.columns:
+            cat_count = df['outcome_category'].notna().sum()
+            st.write(f"Trades with outcome_category: {cat_count}")
+            if cat_count > 0:
+                st.write("Categories:", df['outcome_category'].value_counts().to_dict())
+        # Show has_postmortem check result
+        has_postmortem_check = (
+            ('post_mortem' in df.columns and df['post_mortem'].notna().any()) or
+            ('outcome_category' in df.columns and df['outcome_category'].notna().any())
+        )
+        st.write(f"has_postmortem check: {has_postmortem_check}")
+
+    # --- KPI ROW ---
+    col1, col2, col3, col4 = st.columns(4)
+
+    # Calculate Metrics
+    approvals = df[df['decision'] == "APPROVE"] if 'decision' in df.columns else pd.DataFrame()
+    rejections = df[df['decision'] == "REJECT"] if 'decision' in df.columns else pd.DataFrame()
+
+    # Hit Rate (Requires PnL to be populated)
+    # Check if we have any non-null PnL values
+    has_pnl = 'pnl' in df.columns and df['pnl'].notna().any()
+
+    if has_pnl:
+        # Filter approvals that have PnL values
+        approvals_with_pnl = approvals[approvals['pnl'].notna()]
+        if not approvals_with_pnl.empty:
+            hit_rate = len(approvals_with_pnl[approvals_with_pnl['pnl'] > 0]) / len(approvals_with_pnl)
+            avg_pnl = approvals_with_pnl['pnl'].sum()
+        else:
+            hit_rate = 0
+            avg_pnl = 0
     
-    st.stop()  # Don't render the trade analysis dashboard
+        # Filter rejections that have PnL values (for regret tracking)
+        rejections_with_pnl = rejections[rejections['pnl'].notna()]
+        if not rejections_with_pnl.empty:
+            regret_count = len(rejections_with_pnl[rejections_with_pnl['pnl'] > 0])
+            regret_rate = regret_count / len(rejections_with_pnl)
+        else:
+            regret_rate = 0
+    else:
+        hit_rate = 0
+        regret_rate = 0
+        avg_pnl = 0
 
-# --- TRADE ANALYSIS MODE (ORIGINAL DASHBOARD) ---
-df = load_data(MEMORY_FILE)
+    col1.metric("Hit Rate (Precision)", f"{hit_rate:.1%}" if has_pnl else "N/A", delta_color="normal")
+    col2.metric("Regret Rate (FOMO)", f"{regret_rate:.1%}" if has_pnl else "N/A", delta_color="inverse")
+    col3.metric("Total System PnL", f"${avg_pnl:.2f}" if has_pnl else "N/A")
+    col4.metric("Total Trades", len(df))
 
-if df.empty:
-    st.warning(f"No data found in {MEMORY_FILE}. Run the bot to generate memory!")
-    st.stop()
+    # --- CHARTS ---
+    c1, c2 = st.columns(2)
 
-# Debug info in sidebar (after df is loaded)
-with st.sidebar.expander("🔍 Debug Info"):
-    st.write(f"Total trades: {len(df)}")
-    if 'post_mortem' in df.columns:
-        pm_count = df['post_mortem'].notna().sum()
-        st.write(f"Trades with post_mortem: {pm_count}")
-        if pm_count > 0:
-            # Show sample
-            sample_pm = df[df['post_mortem'].notna()]['post_mortem'].iloc[0]
-            if isinstance(sample_pm, dict):
-                st.write(f"Sample post_mortem keys: {list(sample_pm.keys())}")
-    if 'outcome_category' in df.columns:
-        cat_count = df['outcome_category'].notna().sum()
-        st.write(f"Trades with outcome_category: {cat_count}")
-        if cat_count > 0:
-            st.write("Categories:", df['outcome_category'].value_counts().to_dict())
-    # Show has_postmortem check result
-    has_postmortem_check = (
+    with c1:
+        st.subheader("Decision Boundary")
+        if 'trust_score' in df.columns and 'llm_confidence' in df.columns:
+            # Filter out NaN values
+            plot_df = df[df['trust_score'].notna() & df['llm_confidence'].notna()].copy()
+        
+            if not plot_df.empty:
+                # Scatter plot: Trust Score vs LLM Confidence, colored by Outcome
+                fig = px.scatter(
+                    plot_df, 
+                    x="trust_score", 
+                    y="llm_confidence", 
+                    color="decision",
+                    symbol="outcome_type" if 'outcome_type' in plot_df.columns and plot_df['outcome_type'].notna().any() else None,
+                    hover_data=["symbol", "rationale"] if 'rationale' in plot_df.columns else ["symbol"],
+                    title="Did the LLM agree with the Trust Score?",
+                    color_discrete_map={"APPROVE": "green", "REJECT": "red", "WAIT": "orange"}
+                )
+                fig.add_hline(y=0.75, line_dash="dash", annotation_text="Confidence Threshold", line_color="gray")
+                fig.add_vline(x=0.6, line_dash="dash", annotation_text="Trust Threshold", line_color="gray")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Insufficient data for scatter plot (missing trust_score or llm_confidence).")
+        else:
+            st.info("Insufficient data for scatter plot.")
+
+    with c2:
+        st.subheader("Recent Activity")
+        if not approvals.empty and 'llm_confidence' in approvals.columns:
+            # Get recent approvals
+            recent_approvals = approvals.head(20).copy()
+            if 'timestamp' in recent_approvals.columns:
+                recent_approvals['timestamp'] = pd.to_datetime(recent_approvals['timestamp'], errors='coerce')
+                recent_approvals = recent_approvals.sort_values('timestamp', ascending=False)
+        
+            fig2 = px.bar(
+                recent_approvals, 
+                x="symbol" if 'symbol' in recent_approvals.columns else recent_approvals.index, 
+                y="llm_confidence", 
+                color="symbol" if 'symbol' in recent_approvals.columns else None,
+                title="Recent Approved Trades Confidence",
+                labels={"llm_confidence": "LLM Confidence", "symbol": "Symbol"}
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No approvals yet or missing confidence data.")
+
+    # --- RAW DATA ---
+    st.subheader("Reasoning Logs")
+    cols_to_show = ['timestamp', 'symbol', 'decision', 'llm_confidence', 'trust_score', 'rationale']
+    available_cols = [col for col in cols_to_show if col in df.columns]
+
+    if has_pnl and 'pnl' in df.columns:
+        if 'pnl' not in available_cols:
+            available_cols.insert(5, 'pnl')
+
+    # Sort by timestamp if available
+    sort_col = 'timestamp' if 'timestamp' in df.columns else None
+    if sort_col:
+        df_display = df[available_cols].sort_values('timestamp', ascending=False)
+    else:
+        df_display = df[available_cols]
+
+    st.dataframe(
+        df_display,
+        use_container_width=True
+    )
+
+    # --- LESSONS LEARNED SECTION ---
+    # Check for post-mortem data - look for either outcome_category column or post_mortem column
+    has_postmortem = (
         ('post_mortem' in df.columns and df['post_mortem'].notna().any()) or
         ('outcome_category' in df.columns and df['outcome_category'].notna().any())
     )
-    st.write(f"has_postmortem check: {has_postmortem_check}")
 
-# --- KPI ROW ---
-col1, col2, col3, col4 = st.columns(4)
-
-# Calculate Metrics
-approvals = df[df['decision'] == "APPROVE"] if 'decision' in df.columns else pd.DataFrame()
-rejections = df[df['decision'] == "REJECT"] if 'decision' in df.columns else pd.DataFrame()
-
-# Hit Rate (Requires PnL to be populated)
-# Check if we have any non-null PnL values
-has_pnl = 'pnl' in df.columns and df['pnl'].notna().any()
-
-if has_pnl:
-    # Filter approvals that have PnL values
-    approvals_with_pnl = approvals[approvals['pnl'].notna()]
-    if not approvals_with_pnl.empty:
-        hit_rate = len(approvals_with_pnl[approvals_with_pnl['pnl'] > 0]) / len(approvals_with_pnl)
-        avg_pnl = approvals_with_pnl['pnl'].sum()
-    else:
-        hit_rate = 0
-        avg_pnl = 0
+    if has_postmortem:
+        st.header("📚 Lessons Learned")
     
-    # Filter rejections that have PnL values (for regret tracking)
-    rejections_with_pnl = rejections[rejections['pnl'].notna()]
-    if not rejections_with_pnl.empty:
-        regret_count = len(rejections_with_pnl[rejections_with_pnl['pnl'] > 0])
-        regret_rate = regret_count / len(rejections_with_pnl)
-    else:
-        regret_rate = 0
-else:
-    hit_rate = 0
-    regret_rate = 0
-    avg_pnl = 0
-
-col1.metric("Hit Rate (Precision)", f"{hit_rate:.1%}" if has_pnl else "N/A", delta_color="normal")
-col2.metric("Regret Rate (FOMO)", f"{regret_rate:.1%}" if has_pnl else "N/A", delta_color="inverse")
-col3.metric("Total System PnL", f"${avg_pnl:.2f}" if has_pnl else "N/A")
-col4.metric("Total Trades", len(df))
-
-# --- CHARTS ---
-c1, c2 = st.columns(2)
-
-with c1:
-    st.subheader("Decision Boundary")
-    if 'trust_score' in df.columns and 'llm_confidence' in df.columns:
-        # Filter out NaN values
-        plot_df = df[df['trust_score'].notna() & df['llm_confidence'].notna()].copy()
-        
-        if not plot_df.empty:
-            # Scatter plot: Trust Score vs LLM Confidence, colored by Outcome
-            fig = px.scatter(
-                plot_df, 
-                x="trust_score", 
-                y="llm_confidence", 
-                color="decision",
-                symbol="outcome_type" if 'outcome_type' in plot_df.columns and plot_df['outcome_type'].notna().any() else None,
-                hover_data=["symbol", "rationale"] if 'rationale' in plot_df.columns else ["symbol"],
-                title="Did the LLM agree with the Trust Score?",
-                color_discrete_map={"APPROVE": "green", "REJECT": "red", "WAIT": "orange"}
-            )
-            fig.add_hline(y=0.75, line_dash="dash", annotation_text="Confidence Threshold", line_color="gray")
-            fig.add_vline(x=0.6, line_dash="dash", annotation_text="Trust Threshold", line_color="gray")
-            st.plotly_chart(fig, use_container_width=True)
+        # Filter trades with post-mortem data
+        if 'outcome_category' in df.columns:
+            postmortem_trades = df[df['outcome_category'].notna()].copy()
+        elif 'post_mortem' in df.columns:
+            # Extract outcome_category from post_mortem if not already extracted
+            postmortem_trades = df[df['post_mortem'].notna()].copy()
+            if 'outcome_category' not in postmortem_trades.columns:
+                postmortem_trades['outcome_category'] = postmortem_trades['post_mortem'].apply(
+                    lambda x: x.get('outcome_category') if isinstance(x, dict) else None
+                )
         else:
-            st.info("Insufficient data for scatter plot (missing trust_score or llm_confidence).")
-    else:
-        st.info("Insufficient data for scatter plot.")
-
-with c2:
-    st.subheader("Recent Activity")
-    if not approvals.empty and 'llm_confidence' in approvals.columns:
-        # Get recent approvals
-        recent_approvals = approvals.head(20).copy()
-        if 'timestamp' in recent_approvals.columns:
-            recent_approvals['timestamp'] = pd.to_datetime(recent_approvals['timestamp'], errors='coerce')
-            recent_approvals = recent_approvals.sort_values('timestamp', ascending=False)
-        
-        fig2 = px.bar(
-            recent_approvals, 
-            x="symbol" if 'symbol' in recent_approvals.columns else recent_approvals.index, 
-            y="llm_confidence", 
-            color="symbol" if 'symbol' in recent_approvals.columns else None,
-            title="Recent Approved Trades Confidence",
-            labels={"llm_confidence": "LLM Confidence", "symbol": "Symbol"}
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.info("No approvals yet or missing confidence data.")
-
-# --- RAW DATA ---
-st.subheader("Reasoning Logs")
-cols_to_show = ['timestamp', 'symbol', 'decision', 'llm_confidence', 'trust_score', 'rationale']
-available_cols = [col for col in cols_to_show if col in df.columns]
-
-if has_pnl and 'pnl' in df.columns:
-    if 'pnl' not in available_cols:
-        available_cols.insert(5, 'pnl')
-
-# Sort by timestamp if available
-sort_col = 'timestamp' if 'timestamp' in df.columns else None
-if sort_col:
-    df_display = df[available_cols].sort_values('timestamp', ascending=False)
-else:
-    df_display = df[available_cols]
-
-st.dataframe(
-    df_display,
-    use_container_width=True
-)
-
-# --- LESSONS LEARNED SECTION ---
-# Check for post-mortem data - look for either outcome_category column or post_mortem column
-has_postmortem = (
-    ('post_mortem' in df.columns and df['post_mortem'].notna().any()) or
-    ('outcome_category' in df.columns and df['outcome_category'].notna().any())
-)
-
-if has_postmortem:
-    st.header("📚 Lessons Learned")
+            postmortem_trades = pd.DataFrame()
     
-    # Filter trades with post-mortem data
-    if 'outcome_category' in df.columns:
-        postmortem_trades = df[df['outcome_category'].notna()].copy()
-    elif 'post_mortem' in df.columns:
-        # Extract outcome_category from post_mortem if not already extracted
-        postmortem_trades = df[df['post_mortem'].notna()].copy()
-        if 'outcome_category' not in postmortem_trades.columns:
-            postmortem_trades['outcome_category'] = postmortem_trades['post_mortem'].apply(
-                lambda x: x.get('outcome_category') if isinstance(x, dict) else None
-            )
-    else:
-        postmortem_trades = pd.DataFrame()
-    
-    if not postmortem_trades.empty:
-        # Accuracy of Conviction Metric
-        st.subheader("Accuracy of Conviction")
+        if not postmortem_trades.empty:
+            # Accuracy of Conviction Metric
+            st.subheader("Accuracy of Conviction")
         
-        # Calculate correlation between adjusted_confidence and actual outcome
-        # Convert outcome to numeric: WIN=1, LOSS=-1, BREAKEVEN=0
-        def outcome_to_numeric(outcome_str):
-            if pd.isna(outcome_str):
-                return None
-            outcome_upper = str(outcome_str).upper()
-            if 'WIN' in outcome_upper or 'PROFIT' in outcome_upper:
-                return 1.0
-            elif 'LOSS' in outcome_upper:
-                return -1.0
+            # Calculate correlation between adjusted_confidence and actual outcome
+            # Convert outcome to numeric: WIN=1, LOSS=-1, BREAKEVEN=0
+            def outcome_to_numeric(outcome_str):
+                if pd.isna(outcome_str):
+                    return None
+                outcome_upper = str(outcome_str).upper()
+                if 'WIN' in outcome_upper or 'PROFIT' in outcome_upper:
+                    return 1.0
+                elif 'LOSS' in outcome_upper:
+                    return -1.0
+                else:
+                    return 0.0
+        
+            postmortem_trades['outcome_numeric'] = postmortem_trades['postmortem_outcome'].apply(outcome_to_numeric)
+        
+            # Filter for trades with both adjusted_confidence and outcome_numeric
+            valid_for_correlation = postmortem_trades[
+                postmortem_trades['adjusted_confidence'].notna() & 
+                postmortem_trades['outcome_numeric'].notna()
+            ]
+        
+            if len(valid_for_correlation) > 1:
+                correlation = valid_for_correlation['adjusted_confidence'].corr(valid_for_correlation['outcome_numeric'])
+                if pd.notna(correlation):
+                    st.metric(
+                        "Confidence-Outcome Correlation",
+                        f"{correlation:.3f}",
+                        help="Correlation between adjusted_confidence and actual outcome. Higher = better calibration."
+                    )
+                else:
+                    st.info("Insufficient data to calculate correlation.")
             else:
-                return 0.0
+                st.info("Need at least 2 trades with both adjusted_confidence and outcome to calculate correlation.")
         
-        postmortem_trades['outcome_numeric'] = postmortem_trades['postmortem_outcome'].apply(outcome_to_numeric)
+            # Hall of Shame/Fame
+            col_shame, col_fame = st.columns(2)
         
-        # Filter for trades with both adjusted_confidence and outcome_numeric
-        valid_for_correlation = postmortem_trades[
-            postmortem_trades['adjusted_confidence'].notna() & 
-            postmortem_trades['outcome_numeric'].notna()
-        ]
+            with col_shame:
+                st.subheader("🏆 Hall of Shame (Model Hallucinations)")
+                hallucinations = postmortem_trades[
+                    postmortem_trades['outcome_category'] == 'MODEL_HALLUCINATION'
+                ].copy()
+            
+                if not hallucinations.empty:
+                    shame_cols = ['timestamp', 'symbol', 'root_cause', 'lesson_learned', 'pnl']
+                    available_shame = [c for c in shame_cols if c in hallucinations.columns]
+                    st.dataframe(
+                        hallucinations[available_shame].sort_values('timestamp', ascending=False) if 'timestamp' in hallucinations.columns else hallucinations[available_shame],
+                        use_container_width=True,
+                        height=300
+                    )
+                    st.caption(f"Total: {len(hallucinations)} trades")
+                else:
+                    st.info("No model hallucinations detected. 🎉")
         
-        if len(valid_for_correlation) > 1:
-            correlation = valid_for_correlation['adjusted_confidence'].corr(valid_for_correlation['outcome_numeric'])
-            if pd.notna(correlation):
-                st.metric(
-                    "Confidence-Outcome Correlation",
-                    f"{correlation:.3f}",
-                    help="Correlation between adjusted_confidence and actual outcome. Higher = better calibration."
+            with col_fame:
+                st.subheader("🎲 Hall of Fame (Lucky Wins)")
+                lucky_wins = postmortem_trades[
+                    postmortem_trades['outcome_category'] == 'LUCK'
+                ].copy()
+            
+                if not lucky_wins.empty:
+                    fame_cols = ['timestamp', 'symbol', 'root_cause', 'lesson_learned', 'pnl']
+                    available_fame = [c for c in fame_cols if c in lucky_wins.columns]
+                    st.dataframe(
+                        lucky_wins[available_fame].sort_values('timestamp', ascending=False) if 'timestamp' in lucky_wins.columns else lucky_wins[available_fame],
+                        use_container_width=True,
+                        height=300
+                    )
+                    st.caption(f"Total: {len(lucky_wins)} trades")
+                else:
+                    st.info("No lucky wins detected.")
+        
+            # Breakdown by Outcome Category
+            st.subheader("Outcome Category Breakdown")
+            category_counts = postmortem_trades['outcome_category'].value_counts()
+        
+            if not category_counts.empty:
+                fig_categories = px.bar(
+                    x=category_counts.index,
+                    y=category_counts.values,
+                    title="Distribution of Outcome Categories",
+                    labels={'x': 'Outcome Category', 'y': 'Count'}
                 )
-            else:
-                st.info("Insufficient data to calculate correlation.")
+                st.plotly_chart(fig_categories, use_container_width=True)
+            
+                # Show summary table
+                category_summary = postmortem_trades.groupby('outcome_category').agg({
+                    'pnl': ['count', 'mean', 'sum'],
+                    'adjusted_confidence': 'mean'
+                }).round(3)
+                st.dataframe(category_summary, use_container_width=True)
         else:
-            st.info("Need at least 2 trades with both adjusted_confidence and outcome to calculate correlation.")
-        
-        # Hall of Shame/Fame
-        col_shame, col_fame = st.columns(2)
-        
-        with col_shame:
-            st.subheader("🏆 Hall of Shame (Model Hallucinations)")
-            hallucinations = postmortem_trades[
-                postmortem_trades['outcome_category'] == 'MODEL_HALLUCINATION'
-            ].copy()
-            
-            if not hallucinations.empty:
-                shame_cols = ['timestamp', 'symbol', 'root_cause', 'lesson_learned', 'pnl']
-                available_shame = [c for c in shame_cols if c in hallucinations.columns]
-                st.dataframe(
-                    hallucinations[available_shame].sort_values('timestamp', ascending=False) if 'timestamp' in hallucinations.columns else hallucinations[available_shame],
-                    use_container_width=True,
-                    height=300
-                )
-                st.caption(f"Total: {len(hallucinations)} trades")
-            else:
-                st.info("No model hallucinations detected. 🎉")
-        
-        with col_fame:
-            st.subheader("🎲 Hall of Fame (Lucky Wins)")
-            lucky_wins = postmortem_trades[
-                postmortem_trades['outcome_category'] == 'LUCK'
-            ].copy()
-            
-            if not lucky_wins.empty:
-                fame_cols = ['timestamp', 'symbol', 'root_cause', 'lesson_learned', 'pnl']
-                available_fame = [c for c in fame_cols if c in lucky_wins.columns]
-                st.dataframe(
-                    lucky_wins[available_fame].sort_values('timestamp', ascending=False) if 'timestamp' in lucky_wins.columns else lucky_wins[available_fame],
-                    use_container_width=True,
-                    height=300
-                )
-                st.caption(f"Total: {len(lucky_wins)} trades")
-            else:
-                st.info("No lucky wins detected.")
-        
-        # Breakdown by Outcome Category
-        st.subheader("Outcome Category Breakdown")
-        category_counts = postmortem_trades['outcome_category'].value_counts()
-        
-        if not category_counts.empty:
-            fig_categories = px.bar(
-                x=category_counts.index,
-                y=category_counts.values,
-                title="Distribution of Outcome Categories",
-                labels={'x': 'Outcome Category', 'y': 'Count'}
-            )
-            st.plotly_chart(fig_categories, use_container_width=True)
-            
-            # Show summary table
-            category_summary = postmortem_trades.groupby('outcome_category').agg({
-                'pnl': ['count', 'mean', 'sum'],
-                'adjusted_confidence': 'mean'
-            }).round(3)
-            st.dataframe(category_summary, use_container_width=True)
+            st.info("No post-mortem data available. Run the reviewer daemon to generate analysis.")
     else:
-        st.info("No post-mortem data available. Run the reviewer daemon to generate analysis.")
-else:
-    st.info("💡 Post-mortem analysis not yet available. Run `python daemon/reviewer.py` to generate lessons learned.")
+        st.info("💡 Post-mortem analysis not yet available. Run `python daemon/reviewer.py` to generate lessons learned.")
 
