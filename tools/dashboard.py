@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import subprocess
 import plotly.express as px
 from pathlib import Path
+from datetime import datetime
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -48,6 +50,93 @@ else:
 if st.sidebar.button("🔄 Refresh Data", help="Clear cache and reload data"):
     st.cache_data.clear()
     st.rerun()
+
+# =============================
+# ADMIN ACTIONS PANEL
+# =============================
+
+st.sidebar.markdown("---")
+st.sidebar.header("⚡ Admin Actions")
+st.sidebar.caption("Trigger backend processes")
+
+def run_background_process(command_list, log_name, description):
+    """
+    Run a command as a background process and log output.
+    
+    Args:
+        command_list: Command to execute as a list (e.g., ["python", "script.py"])
+        log_name: Name for the log file (e.g., "miner")
+        description: Human-readable description for the toast message
+    """
+    try:
+        log_dir = project_root / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{log_name}.log"
+        
+        # Append timestamp to log
+        with open(log_file, 'a') as f:
+            f.write(f"\n{'='*50}\n")
+            f.write(f"Started at: {datetime.now().isoformat()}\n")
+            f.write(f"Command: {' '.join(command_list)}\n")
+            f.write(f"{'='*50}\n")
+        
+        # Start process in background
+        with open(log_file, 'a') as f:
+            process = subprocess.Popen(
+                command_list,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                cwd=str(project_root),
+                text=True
+            )
+        
+        st.success(f"🚀 Started {description}! (PID: {process.pid})")
+        st.info(f"📝 Logs: `logs/{log_name}.log`")
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Failed to start {description}: {e}")
+        return False
+
+# Admin action buttons
+col1, col2 = st.sidebar.columns(2)
+
+with col1:
+    if st.button("⛏️ Re-Mine", help="Extract patterns from recent market data", use_container_width=True):
+        run_background_process(
+            ["python", "research/miner.py"],
+            "miner_manual",
+            "Data Miner"
+        )
+
+with col2:
+    if st.button("🎮 War Games", help="Run strategy simulations", use_container_width=True):
+        run_background_process(
+            ["python", "daemon/simulator/war_games_runner.py"],
+            "wargames_manual",
+            "War Games Simulator"
+        )
+
+col3, col4 = st.sidebar.columns(2)
+
+with col3:
+    if st.button("🧠 Optimize", help="Select best strategy parameters", use_container_width=True):
+        run_background_process(
+            ["python", "agents/trm/strategy_optimizer_agent.py"],
+            "optimizer_manual",
+            "Strategy Optimizer"
+        )
+
+with col4:
+    if st.button("📝 Review", help="Generate trade post-mortems", use_container_width=True):
+        run_background_process(
+            ["python", "daemon/reviewer.py"],
+            "reviewer_manual",
+            "Trade Reviewer"
+        )
+
+st.sidebar.caption("⚠️ These processes run in background. Check logs for progress.")
 
 
 @st.cache_data(ttl=5)

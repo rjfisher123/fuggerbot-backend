@@ -164,6 +164,13 @@ def main():
         "Trading Bot",
         f"{LOG_DIR}/bot.log"
     )
+    
+    # 5. Start Trade Reviewer (Post-Mortem Analysis)
+    start_process(
+        ["python", "daemon/reviewer.py"],
+        "Trade Reviewer",
+        f"{LOG_DIR}/reviewer.log"
+    )
 
     print("\n✅ SYSTEM OPERATIONAL")
     print(f"📊 Main Dashboard:  http://localhost:8501")
