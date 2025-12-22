@@ -23,7 +23,10 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
 
 # Phase 3: Import technical analysis for quality filters
+# Phase 3: Import technical analysis for quality filters
 from models.technical_analysis import add_indicators, is_quality_setup
+from context.tracker import RegimeTracker
+from core.memory.trm_learner import TRMLearnerAgent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -234,9 +237,13 @@ class WarGamesRunner:
         start_date: str,
         end_date: str,
         params: TradingParams,
-        initial_balance: float = 10000.0
+        initial_balance: float = 10000.0,
+        simulate_delusion: bool = False
     ) -> CampaignResult:
-        logger.info(f"🎮 Starting campaign: {campaign_name}")
+        logger.info(f"🎮 Starting campaign: {campaign_name} (Delusion: {simulate_delusion})")
+        
+        learner = TRMLearnerAgent(Path("data"))
+        regime_tracker = RegimeTracker() # Note: In simulation we might want to mock this or rely on cached data
         
         df = self.load_data(symbol, start_date, end_date)
         if df.empty:
@@ -303,6 +310,27 @@ class WarGamesRunner:
                         forecast_confidence=position['forecast_confidence']
                     ))
                     
+                    # --- TRM FEEDBACK (v1.5) ---
+                    # Record the completed episode
+                    # TODO: Get actual regime from history for that date? Using current for now as approximation
+                    # regime = regime_tracker.get_regime_at(current_date)? 
+                    # We will just use "SIMULATED" or get robust if needed.
+                    
+                    outcome = "PROFIT" if pnl > 0 else "LOSS"
+                    learner.record_episode(
+                        forecast=0.0, # Not tracking raw signal here easily yet
+                        confidence=position['forecast_confidence'],
+                        regime="SIMULATED", # Placeholder until we have historical regime lookups
+                        decision="APPROVE",
+                        outcome=outcome,
+                        pnl=pnl,
+                        meta={
+                            "symbol": symbol,
+                            "reason": reason,
+                            "delusion": position.get('delusion', False)
+                        }
+                    )
+                    
                     position = None
                     cooldown_until = current_date + timedelta(days=params.cooldown_days)
                 
@@ -313,6 +341,12 @@ class WarGamesRunner:
                 trust_score = self._calculate_trust_score(df, idx)
                 forecast_confidence, target_price = self._calculate_forecast_confidence(df, idx)
                 
+                # --- DELUSION INJECTION (v1.5) ---
+                if simulate_delusion and np.random.random() < 0.15: # 15% chance of hallucination
+                    forecast_confidence = min(0.99, forecast_confidence + 0.4) # Boost confidence artificially
+                    target_price = current_price * 1.20 # Unrealistic target
+                    # logger.debug("🤪 Delusion injected!")
+
                 row = df.iloc[idx]
                 quality_check = is_quality_setup(
                     rsi=row['rsi_14'],
@@ -330,6 +364,15 @@ class WarGamesRunner:
                     target_price > current_price * 1.02 and
                     quality_check
                 )
+                
+                # --- TRM LEARNING (v1.5) ---
+                # Record the "decision" even if we don't enter (REJECT)
+                # But we only know the outcome later?
+                # For simplicity in this loop, we record "Potential Entry" decisions
+                
+                # If we entered, we will record the outcome at exit.
+                # If we REJECTED, we can calculate counterfactual later?
+                # For now, let's just record the entry decision context.
                 
                 if should_enter:
                     position_size = self._calculate_kelly_position_size(
@@ -350,7 +393,8 @@ class WarGamesRunner:
                             'shares': shares,
                             'position_size': position_size,
                             'trust_score': trust_score,
-                            'forecast_confidence': forecast_confidence
+                            'forecast_confidence': forecast_confidence,
+                            'delusion': simulate_delusion # Tag for memory
                         }
             
             # Update DD
@@ -544,12 +588,23 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--quick", action="store_true", help="Run quick test")
+    parser.add_argument("--simulate-delusion", action="store_true", help="Inject hallucinations")
     parser.add_argument("--output", type=str, default="data/war_games_results.json")
     args = parser.parse_args()
     
     runner = WarGamesRunner()
     
     if args.quick:
-        runner.run_campaign("Quick Test", "BTC-USD", "2023-01-01", "2023-06-30", TradingParams())
+        # Pass the new simulate_delusion flag
+        runner.run_campaign(
+            "Quick Test", 
+            "BTC-USD", 
+            "2023-01-01", 
+            "2023-06-30", 
+            TradingParams(),
+            simulate_delusion=args.simulate_delusion
+        )
     else:
+        # Note: run_all_scenarios needs update to support delusion flag pass-through
+        # For now, we only support it in quick mode or we update run_all_scenarios
         runner.run_all_scenarios(Path(args.output))

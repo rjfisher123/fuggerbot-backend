@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+from core.memory.trm_learner import TRMLearnerAgent
+
 # Ensure project root is on sys.path when run as a script
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -70,9 +72,17 @@ def run_tuning_cycle(
             params_path = regime_params_path
             logger.info(f"📁 Using regime-specific params: {regime_params_path}")
         else:
+            # Fallback to general params if specific doesn't exist yet
+            # Ideally we might want to copy general to specific starting point?
             params_path = Path("data/adaptive_params.json")
     
     loader = AdaptiveParamLoader(params_path)
+    
+    # Initialize learner
+    learner = TRMLearnerAgent(Path("data"))
+    tuning_recommendation = learner.predict_tuning(regime_id)
+    if tuning_recommendation:
+        logger.info(f"🤖 TRM Learner Suggests for {regime_id}: {tuning_recommendation}")
 
     profiles = profiler.generate_profiles()
     if not profiles:
@@ -84,6 +94,20 @@ def run_tuning_cycle(
     for symbol, metrics in profiles.items():
         current = loader.get_params(symbol)
         updates: Dict[str, Any] = {}
+        
+        # Override with TRM suggestions if applicable
+        if "min_confidence_suggestion" in tuning_recommendation:
+            suggested_conf = tuning_recommendation["min_confidence_suggestion"]
+            current_conf = current.get("min_confidence", CONF_MIN)
+            if suggested_conf > current_conf:
+                 # Apply suggestion immediately if it's stricter than current
+                 reason = f"TRM Learner Suggestion (Regret History in {regime_id})"
+                 _apply_update(
+                    loader, symbol, "min_confidence", current_conf, suggested_conf,
+                    reason, 0.0, 0.0, updates, regime_id
+                 )
+                 # Update 'current' so subsequent logic sees the new baseline
+                 current["min_confidence"] = suggested_conf
 
         hit_rate = metrics.get("hit_rate", 0.0) or 0.0
         regret_rate = metrics.get("regret_rate", 0.0) or 0.0

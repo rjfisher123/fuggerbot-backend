@@ -13,10 +13,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("FuggerReasoning")
 
 
-class DeepSeekEngine:
+class MetaCriticAgent:
+    """
+    The MetaCritic: A specific agentic implementation using DeepSeek Reasoner.
+    Orchestrates Proposer -> Critic -> Verdict reasoning chains.
+    """
     def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com/v1", model: str = "deepseek-reasoner"):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
+
+# Alias for backward compatibility
+DeepSeekEngine = MetaCriticAgent
 
     def _get_system_prompt(self, red_team_mode: bool) -> str:
         base_persona = (
@@ -144,18 +151,24 @@ class DeepSeekEngine:
                 
         return data
 
-    def analyze_trade(self, context: TradeContext, red_team_mode: bool = False) -> Optional[DeepSeekResponse]:
+    def analyze_trade(self, context: TradeContext, mode: str = "standard") -> Optional[DeepSeekResponse]:
         """
-        Analyze trade with adversarial critique loop (v1.5).
+        Analyze trade with MetaCritic flow.
         
-        Step A: Generate initial thesis (Thinking Mode)
-        Step B: Pass thesis to Red Team for critique
-        Step C: Final synthesis into JSON decision
+        Modes:
+        - "standard": Balanced analysis.
+        - "adversarial": Trigger separate Proposer/Critic agents.
         
-        Records proposer_confidence vs final_confidence for metrics.
+        Flow:
+        1. ProposerAgent: Generates thesis (even if weak).
+        2. CriticAgent (Adversarial only): Attacks thesis.
+        3. VerdictAgent: Synthesizes final decision.
         """
-        # Step A: Generate initial thesis
-        logger.info(f"[Step A] Generating initial thesis for {context.symbol}...")
+        red_team_mode = (mode == "adversarial")
+        
+        # Step A: Proposer Agent (The "Bull")
+        # In adversarial mode, the Proposer tries to sell it, the Critic tries to kill it.
+        logger.info(f"🧠 [MetaCritic] Step A: Proposer Agent generating thesis for {context.symbol}...")
         
         proposer_prompt = (
             f"Analyze this Trade Setup:\n"
@@ -201,9 +214,9 @@ class DeepSeekEngine:
             
             logger.info(f"[Step A] Initial thesis: {proposer_data.get('decision', 'UNKNOWN')} @ {proposer_confidence:.2f} confidence")
             
-            # Step B: Adversarial critique (if not already in red_team_mode)
-            if not red_team_mode:
-                logger.info(f"[Step B] Running adversarial critique...")
+            # Step B: Critic Agent (Adversarial Only)
+            if red_team_mode:
+                logger.info(f"⚔️ [MetaCritic] Step B: Critic Agent attacking thesis...")
                 
                 try:
                     adversarial_prompt = self._get_adversarial_prompt(initial_thesis)
@@ -211,10 +224,10 @@ class DeepSeekEngine:
                     critique_response = self.client.chat.completions.create(
                         model=self.model,
                         messages=[
-                            {"role": "system", "content": "You are a RED TEAM adversarial risk analyst."},
+                            {"role": "system", "content": "You are a CRITIC AGENT. Your job is to DEBUNK the Proposer."},
                             {"role": "user", "content": adversarial_prompt}
                         ],
-                        temperature=0.3,  # Lower temp for more focused critique
+                        temperature=0.3,
                         response_format={"type": "json_object"}
                     )
                     
@@ -228,13 +241,13 @@ class DeepSeekEngine:
                     revised_confidence = critique_data.get("revised_confidence", proposer_confidence)
                     flaws = critique_data.get("flaws", [])
                     
-                    logger.info(f"[Step B] Critique found {len(flaws)} flaws. Revised confidence: {revised_confidence:.2f} (from {proposer_confidence:.2f})")
+                    logger.info(f"⚔️ [MetaCritic] Critic found {len(flaws)} flaws. Confidence impact: {proposer_confidence:.2f} -> {revised_confidence:.2f}")
                 except Exception as e:
-                    logger.warning(f"[Step B] Critique failed: {e}. Proceeding without critique.")
-                    critique_data = None  # Ensure it's None if critique fails
+                    logger.warning(f"[Step B] Critic failed: {e}. Proceeding without critique.")
+                    critique_data = None
             
-            # Step C: Final synthesis
-            logger.info(f"[Step C] Synthesizing final decision...")
+            # Step C: Verdict Agent (Synthesis)
+            logger.info(f"⚖️ [MetaCritic] Step C: Verdict Agent deciding...")
             
             synthesis_prompt = (
                 f"Initial Analysis:\n"

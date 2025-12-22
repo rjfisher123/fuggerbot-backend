@@ -8,6 +8,15 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# --- ASYNCIO FIX FOR STREAMLIT + IB_INSYNC ---
+import asyncio
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+# ---------------------------------------------
+
 # Page config
 from components.icon_display import get_icon_path_for_page_config
 

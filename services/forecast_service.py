@@ -173,6 +173,9 @@ class ForecastService:
                 "fqs_interpretation": fqs.get('interpretation'),
                 "frs_reliability_level": frs.get('reliability_level'),
                 "frs_is_reliable": frs.get('is_reliable'),
+                "frs_components": frs.get('components', {}),
+                "frs_interpretation": frs.get('interpretation', ""),
+                "frs_recommendation": frs.get('recommendation', "")
             }
         )
         

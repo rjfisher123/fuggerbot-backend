@@ -7,7 +7,7 @@ Features auto-reconnection logic to survive TWS restarts.
 import logging
 import time
 import threading
-from typing import Optional, List
+from typing import Optional, List, Dict
 from enum import Enum
 
 from services.risk_control_service import RiskControlService
@@ -584,3 +584,6 @@ def get_paper_trading_trader(host: str = "127.0.0.1", port: int = 7497, client_i
     if _paper_bridge is None:
         _paper_bridge = IBKRBridge(host=host, port=port, client_id=client_id)
     return _paper_bridge
+
+# Compatibility Aliases
+get_live_trading_trader = get_ibkr_trader

@@ -174,7 +174,10 @@ def render_forecast_panel():
                 frs = {
                     "frs_score": forecast_domain.frs_score,
                     "is_reliable": forecast_domain.metadata.get("frs_is_reliable", False),
-                    "reliability_level": forecast_domain.metadata.get("frs_reliability_level", "unknown")
+                    "reliability_level": forecast_domain.metadata.get("frs_reliability_level", "unknown"),
+                    "components": forecast_domain.metadata.get("frs_components", {}),
+                    "interpretation": forecast_domain.metadata.get("frs_interpretation", "N/A"),
+                    "recommendation": forecast_domain.metadata.get("frs_recommendation", "N/A")
                 }
                 coherence = forecast_domain.coherence
                 
@@ -216,13 +219,13 @@ def render_forecast_panel():
                     
                     with col1:
                         st.write("**FRS Components:**")
-                        components = frs['components']
-                        st.write(f"- FQS: {components['fqs']:.3f}")
-                        st.write(f"- Trust Score: {components['trust_score']:.3f}")
-                        st.write(f"- Regime: {components['regime']:.3f}")
-                        st.write(f"- Stability: {components['stability']:.3f}")
-                        st.write(f"- Drift: {components['drift']:.3f}")
-                        st.write(f"- Deterministic: {components['deterministic']:.3f}")
+                        components = frs.get('components', {})
+                        st.write(f"- FQS: {components.get('fqs', 0.0):.3f}")
+                        st.write(f"- Trust Score: {components.get('trust_score', 0.0):.3f}")
+                        st.write(f"- Regime: {components.get('regime', 0.0):.3f}")
+                        st.write(f"- Stability: {components.get('stability', 0.0):.3f}")
+                        st.write(f"- Drift: {components.get('drift', 0.0):.3f}")
+                        st.write(f"- Deterministic: {components.get('deterministic', 0.0):.3f}")
                         st.write(f"\n**Interpretation:** {frs['interpretation']}")
                         st.write(f"**Recommendation:** {frs['recommendation']}")
                     
