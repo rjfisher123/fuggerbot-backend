@@ -8,7 +8,7 @@ import logging
 from typing import Optional, Dict
 import os
 
-from core.ibkr_trader import get_live_trading_trader, get_paper_trading_trader, IBKRTrader
+from execution.ibkr import get_live_trading_trader, get_paper_trading_trader, IBKRBridge as IBKRTrader
 from core.logger import logger
 from core.logger import log_ibkr_event
 

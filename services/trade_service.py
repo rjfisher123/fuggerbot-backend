@@ -8,7 +8,8 @@ import logging
 from typing import Optional, Dict, List
 from datetime import datetime
 
-from core.ibkr_trader import TradeConfirmation, get_live_trading_trader, get_paper_trading_trader
+from services.risk_control_service import RiskControlService as TradeConfirmation
+from execution.ibkr import get_ibkr_trader as get_live_trading_trader, get_paper_trading_trader
 from services.ibkr_client import get_ibkr_client
 from persistence.db import SessionLocal
 from persistence.repositories_trades import TradeRequestRepository, TradeExecutionRepository

@@ -13,7 +13,7 @@ sys.path.insert(0, str(project_root))
 from models.paper_trading import PaperTradingEngine
 from models.forecast_metadata import ForecastMetadata
 from dash.utils.price_feed import get_price
-from core.ibkr_trader import get_paper_trading_trader
+from execution.ibkr import get_paper_trading_trader
 from core.logger import logger
 
 

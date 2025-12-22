@@ -7,8 +7,10 @@ Features auto-reconnection logic to survive TWS restarts.
 import logging
 import time
 import threading
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
+
+from services.risk_control_service import RiskControlService
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +155,9 @@ class IBKRBridge:
         self.watchdog = ConnectionWatchdog(self)
         # Note: watchdog starts when connect() is first called or explicitly started?
         # Better to start it in connect() to avoid checking before initial connection
+        
+        # Initialize Risk Control Service
+        self.risk_control = RiskControlService()
         
         logger.info(
             f"IBKRBridge initialized: host={host}, port={port} "
@@ -364,97 +369,124 @@ class IBKRBridge:
         self,
         action: str,
         symbol: str,
-        quantity: float  # Can be int for stocks or float for crypto
+        quantity: float,  # Can be int for stocks or float for crypto
+        order_type: str = "MARKET",
+        limit_price: float = 0.0,
+        require_confirmation: bool = False
     ) -> Optional[Order]:
         """
-        Execute a market order trade.
-        
-        Creates a MarketOrder and places it asynchronously.
-        Verifies connection before execution and attempts reconnect if needed.
+        Execute a trade with optional SMS confirmation.
         
         Args:
             action: Order action ("BUY" or "SELL")
             symbol: Trading symbol (e.g., "BTC-USD", "NVDA")
             quantity: Number of shares/units to trade
+            order_type: "MARKET" or "LIMIT"
+            limit_price: Price for limit orders (required if LIMIT)
+            require_confirmation: If True, blocks until SMS approval (timeout 5 mins)
         
         Returns:
             Order object if placed successfully, None otherwise
         """
-        # Safety check: Verify connection using ib_insync's isConnected() before trading
+        # Safety check: Verify connection
         if not self.ib.isConnected():
-            logger.warning(
-                f"⚠️ Not connected to IBKR before trade execution. "
-                f"Attempting immediate reconnect..."
-            )
+            logger.warning("⚠️ Not connected to IBKR. Attempting immediate reconnect...")
             self.connected = False
-            
-            # Attempt immediate reconnect (single attempt, no long retry loop)
             try:
-                self.ib.connect(
-                    host=self.host,
-                    port=self.port,
-                    clientId=self.client_id
-                )
+                self.ib.connect(self.host, self.port, clientId=self.client_id)
                 self.connected = True
                 logger.info("✅ Reconnected to TWS before trade execution")
             except Exception as e:
-                logger.error(
-                    f"❌ Cannot execute trade: failed to reconnect to IBKR. "
-                    f"Error: {e}. Ensure TWS/IB Gateway is running."
-                )
+                logger.error(f"❌ Cannot execute trade: failed to reconnect. {e}")
                 return None
         
-        # Double-check connection state
-        if not self.connected or not self.ib.isConnected():
-            logger.error(
-                f"❌ Cannot execute trade: not connected to IBKR. "
-                f"Call connect() first or ensure TWS/IB Gateway is running."
-            )
-            return None
-        
-        # Validate action
         action_upper = action.upper()
         if action_upper not in ["BUY", "SELL"]:
-            logger.error(f"❌ Invalid action: {action}. Must be 'BUY' or 'SELL'")
+            logger.error(f"❌ Invalid action: {action}")
             return None
-        
-        # Validate quantity
-        if quantity <= 0:
-            logger.error(f"❌ Invalid quantity: {quantity}. Must be > 0")
-            return None
-        
+            
         try:
-            # Get contract
+            # 1. Risk Control: SMS Confirmation
+            trade_id = None
+            if require_confirmation:
+                logger.info(f"🛑 RISK CONTROL: SMS Confirmation required for {action} {quantity} {symbol}")
+                
+                trade_details = {
+                    "symbol": symbol, "action": action_upper, 
+                    "quantity": quantity, "order_type": order_type,
+                    "price": limit_price
+                }
+                
+                trade_id = self.risk_control.request_confirmation(trade_details)
+                if not trade_id:
+                    logger.error("Failed to send confirmation SMS. Aborting trade.")
+                    return None
+                
+                # Poll for Approval (Blocking, max 5 mins)
+                logger.info(f"⏳ Waiting for approval (Trade ID: {trade_id})...")
+                approved = False
+                start_wait = time.time()
+                while time.time() - start_wait < 300:
+                    if self.risk_control.check_approval(trade_id):
+                        approved = True
+                        break
+                    time.sleep(5)
+                    
+                if not approved:
+                    logger.warning(f"❌ Trade {trade_id} timed out waiting for approval. Cancelled.")
+                    self.risk_control.send_execution_failure(trade_id, "Approval Timeout")
+                    return None
+                    
+                logger.info(f"✅ Trade {trade_id} APPROVED. Proceeding to execution.")
+
+            # 2. Get Contract
             contract = self.get_contract(symbol)
             if contract is None:
                 logger.error(f"❌ Cannot execute trade: failed to get contract for {symbol}")
                 return None
             
-            # Create market order
-            order = MarketOrder(action_upper, quantity)
+            # 3. Create Order
+            if order_type.upper() == "MARKET":
+                order = MarketOrder(action_upper, quantity)
+            elif order_type.upper() == "LIMIT":
+                order = LimitOrder(action_upper, quantity, limit_price)
+            else:
+                logger.error(f"Invalid order type: {order_type}")
+                return None
             
-            # Place order asynchronously
-            logger.info(
-                f"📤 Placing {action_upper} order: {quantity} {symbol} "
-                f"({'Paper' if self.is_paper_trading else 'Live'} trading)"
-            )
-            
+            # 4. Place Order
+            logger.info(f"📤 Placing {order_type} {action_upper} order: {quantity} {symbol}")
             trade = self.ib.placeOrder(contract, order)
             
             # Log trade details
-            logger.info(
-                f"✅ Order placed: {trade.order.action} {trade.order.totalQuantity} "
-                f"{contract.localSymbol} (Order ID: {trade.order.orderId})"
-            )
+            logger.info(f"✅ Order placed: {trade.order.action} {trade.order.totalQuantity} (Order ID: {trade.order.orderId})")
+            
+            # 5. Notify Success (if confirmed)
+            if require_confirmation and trade_id:
+                self.risk_control.send_confirmation_success(
+                    trade_id=trade_id,
+                    order_id=str(trade.order.orderId),
+                    symbol=symbol
+                )
             
             return trade.order
             
         except Exception as e:
-            logger.error(
-                f"❌ Error executing trade {action} {quantity} {symbol}: {e}",
-                exc_info=True
-            )
+            logger.error(f"❌ Error executing trade {action} {quantity} {symbol}: {e}", exc_info=True)
+            if require_confirmation and trade_id:
+                 self.risk_control.send_execution_failure(trade_id, str(e))
             return None
+
+    def approve_and_execute(self, trade_id: str) -> Dict:
+        """
+        Legacy compatibility method for TradeService.
+        Marks the trade as approved so the blocking execute_trade loop can proceed.
+        """
+        success = self.risk_control.approve_trade(trade_id)
+        if success:
+            return {"success": True, "message": f"Trade {trade_id} approved"}
+        else:
+            return {"success": False, "message": f"Trade {trade_id} not found"}
     
     def get_positions(self) -> list[str]:
         """
@@ -534,3 +566,21 @@ class IBKRBridge:
         """Context manager exit."""
         self.disconnect()
 
+
+# Factory functions for compatibility and easy access
+_live_bridge: Optional['IBKRBridge'] = None
+_paper_bridge: Optional['IBKRBridge'] = None
+
+def get_ibkr_trader(host: str = "127.0.0.1", port: int = 7496, client_id: int = 1) -> 'IBKRBridge':
+    """Get or create a live trading bridge instance."""
+    global _live_bridge
+    if _live_bridge is None:
+        _live_bridge = IBKRBridge(host=host, port=port, client_id=client_id)
+    return _live_bridge
+
+def get_paper_trading_trader(host: str = "127.0.0.1", port: int = 7497, client_id: int = 2) -> 'IBKRBridge':
+    """Get or create a paper trading bridge instance."""
+    global _paper_bridge
+    if _paper_bridge is None:
+        _paper_bridge = IBKRBridge(host=host, port=port, client_id=client_id)
+    return _paper_bridge

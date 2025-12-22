@@ -12,7 +12,7 @@ from datetime import datetime
 from models.execution_layer import ExecutionLayer, IBKRAdapter
 from models.autonomous_execution import AutonomousExecutionEngine
 from models.safety_constraints import SafetyConstraintsEngine
-from core.ibkr_trader import get_ibkr_trader, get_paper_trading_trader
+from execution.ibkr import get_ibkr_trader, get_paper_trading_trader
 from core.logger import logger
 
 
