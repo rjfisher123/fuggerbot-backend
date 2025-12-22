@@ -204,3 +204,8 @@ self.risk_policy = RiskPolicyAgent()
 - **v2.0** - Multi-Layer Architecture with TRM Integration
 - Compatible with v1.5 metrics (proposer_confidence, critique_flaws)
 
+
+
+
+
+

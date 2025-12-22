@@ -179,3 +179,8 @@ class BatchForecastOutput(BaseModel):
 
 
 
+
+
+
+
+

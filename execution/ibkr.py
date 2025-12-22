@@ -2,8 +2,11 @@
 Interactive Brokers execution wrapper using ib_insync.
 
 Robust execution bridge for placing trades through Interactive Brokers TWS/IB Gateway.
+Features auto-reconnection logic to survive TWS restarts.
 """
 import logging
+import time
+import threading
 from typing import Optional
 from enum import Enum
 
@@ -24,6 +27,91 @@ class OrderAction(str, Enum):
     SELL = "SELL"
 
 
+class ConnectionWatchdog(threading.Thread):
+    """
+    Watchdog thread to monitor IBKR connection health and auto-reconnect.
+    
+    Runs in a background thread to prevent blocking the main application loop
+    during connection checks, but ensures the main loop pauses/fails gracefully
+    when connection is lost.
+    """
+    
+    def __init__(self, bridge, interval: int = 10):
+        """
+        Initialize watchdog.
+        
+        Args:
+            bridge: IBKRBridge instance to monitor
+            interval: Check interval in seconds
+        """
+        super().__init__(name="IBKR-Watchdog")
+        self.bridge = bridge
+        self.interval = interval
+        self.daemon = True  # Auto-kill when main process exits
+        self.running = True
+        self._stop_event = threading.Event()
+    
+    def run(self):
+        """Main watchdog loop."""
+        logger.info("🐶 Connection Watchdog started")
+        
+        while self.running and not self._stop_event.is_set():
+            try:
+                if not self._check_connection():
+                   logger.warning("🐶 Watchdog detected connection loss! Initiating recovery...")
+                   self._reconnect()
+            except Exception as e:
+                logger.error(f"🐶 Watchdog error: {e}")
+            
+            # Sleep interruptible
+            self._stop_event.wait(self.interval)
+            
+    def stop(self):
+        """Stop the watchdog."""
+        self.running = False
+        self._stop_event.set()
+        
+    def _check_connection(self) -> bool:
+        """
+        Ping TWS to verify active connection.
+        
+        Returns:
+            True if healthy, False if disconnected/unresponsive
+        """
+        if not self.bridge.ib.isConnected():
+            return False
+            
+        try:
+            # Active ping: Request current time
+            # timeout=2.0 ensures we don't hang if TWS is frozen
+            t = self.bridge.ib.reqCurrentTime()
+            if t:
+                return True
+            return False
+        except Exception:
+            return False
+            
+    def _reconnect(self):
+        """Perform reconnection sequence."""
+        # Pause main loop implicitly by setting connected=False
+        self.bridge.connected = False
+        
+        try:
+            # properly disconnect first
+            try:
+                self.bridge.ib.disconnect()
+            except:
+                pass
+                
+            time.sleep(2) # Cooldown
+            
+            logger.info("🐶 Watchdog attempting reconnect...")
+            self.bridge.connect(use_retry=True)
+            
+        except Exception as e:
+            logger.error(f"🐶 Reconnection failed: {e}")
+
+
 class IBKRBridge:
     """
     Robust execution wrapper for Interactive Brokers.
@@ -35,7 +123,9 @@ class IBKRBridge:
         self,
         host: str = "127.0.0.1",
         port: int = 7497,  # 7497 for Paper, 7496 for Live
-        client_id: int = 1
+        client_id: int = 1,
+        reconnect_interval: int = 60,  # Seconds between reconnection attempts
+        max_reconnect_attempts: int = 0  # 0 = infinite retries
     ):
         """
         Initialize IBKR bridge.
@@ -44,6 +134,8 @@ class IBKRBridge:
             host: TWS/IB Gateway host (default: 127.0.0.1)
             port: TWS/IB Gateway port (7497 for Paper, 7496 for Live)
             client_id: Client ID for connection (default: 1)
+            reconnect_interval: Seconds to wait between reconnection attempts (default: 60)
+            max_reconnect_attempts: Maximum reconnection attempts (0 = infinite, default: 0)
         """
         if not IBKR_AVAILABLE:
             raise ImportError("ib_insync not installed. Install with: pip install ib_insync")
@@ -51,27 +143,44 @@ class IBKRBridge:
         self.host = host
         self.port = port
         self.client_id = client_id
+        self.reconnect_interval = reconnect_interval
+        self.max_reconnect_attempts = max_reconnect_attempts
         self.ib = IB()
         self.connected = False
         self.is_paper_trading = (port == 7497)
         
+        # Start Watchdog
+        self.watchdog = ConnectionWatchdog(self)
+        # Note: watchdog starts when connect() is first called or explicitly started?
+        # Better to start it in connect() to avoid checking before initial connection
+        
         logger.info(
             f"IBKRBridge initialized: host={host}, port={port} "
-            f"({'Paper' if self.is_paper_trading else 'Live'}), client_id={client_id}"
+            f"({'Paper' if self.is_paper_trading else 'Live'}), client_id={client_id}, "
+            f"reconnect_interval={reconnect_interval}s, max_attempts={max_reconnect_attempts or 'infinite'}"
         )
     
-    def connect(self) -> bool:
+    def connect(self, use_retry: bool = True) -> bool:
         """
-        Connect to TWS/IB Gateway.
+        Connect to TWS/IB Gateway with optional retry logic.
         
-        Handles ConnectionRefusedError gracefully by logging a warning
-        and disabling execution (doesn't crash).
+        If use_retry=True, will retry connection every `reconnect_interval` seconds
+        until successful or max_reconnect_attempts is reached.
+        
+        If use_retry=False, attempts connection once and returns immediately.
+        
+        Args:
+            use_retry: Whether to retry connection on failure (default: True)
         
         Returns:
             True if connected successfully, False otherwise
         """
-        if self.connected:
+        # Check if already connected via ib_insync's internal state
+        if self.ib.isConnected():
             logger.debug("Already connected to IBKR")
+            self.connected = True
+            if not self.watchdog.is_alive():
+                 self.watchdog.start()
             return True
         
         try:
@@ -83,20 +192,110 @@ class IBKRBridge:
             )
             self.connected = True
             logger.info(f"✅ Connected to IBKR ({'Paper' if self.is_paper_trading else 'Live'} trading)")
+            
+            # Start Watchdog if not running
+            if not self.watchdog.is_alive():
+                self.watchdog.start()
+                
             return True
             
         except ConnectionRefusedError:
             logger.warning(
                 f"⚠️ Connection refused to IBKR at {self.host}:{self.port}. "
-                f"TWS/IB Gateway may not be running. Execution disabled."
+                f"TWS/IB Gateway may not be running."
             )
             self.connected = False
-            return False
+            
+            # Retry if enabled
+            if use_retry:
+                logger.info("🔄 Retrying connection with auto-reconnect logic...")
+                return self._attempt_reconnect()
+            else:
+                logger.warning("Execution disabled (retry disabled).")
+                return False
             
         except Exception as e:
             logger.error(f"❌ Error connecting to IBKR: {e}", exc_info=True)
             self.connected = False
-            return False
+            
+            # Retry if enabled
+            if use_retry:
+                logger.info("🔄 Retrying connection with auto-reconnect logic...")
+                return self._attempt_reconnect()
+            else:
+                return False
+
+    def _attempt_reconnect(self) -> bool:
+        """
+        Attempt to reconnect to TWS/IB Gateway with retry logic.
+        
+        Tries to reconnect every `reconnect_interval` seconds.
+        If `max_reconnect_attempts` is set (> 0), stops after that many attempts.
+        Otherwise, retries indefinitely.
+        
+        Returns:
+            True if reconnected successfully, False if max attempts exceeded
+        """
+        attempt = 0
+        while True:
+            attempt += 1
+            
+            # Check if max attempts exceeded (only if max_reconnect_attempts > 0)
+            if self.max_reconnect_attempts > 0 and attempt > self.max_reconnect_attempts:
+                logger.error(
+                    f"❌ Failed to reconnect after {self.max_reconnect_attempts} attempts. "
+                    f"Giving up."
+                )
+                return False
+            
+            logger.info(
+                f"🔄 Reconnection attempt {attempt}"
+                f"{f'/{self.max_reconnect_attempts}' if self.max_reconnect_attempts > 0 else ''}..."
+            )
+            
+            try:
+                # Check if already connected (via another thread or manual reconnect)
+                if self.ib.isConnected():
+                    logger.info("✅ Already reconnected to TWS")
+                    self.connected = True
+                    return True
+                
+                # Attempt connection
+                self.ib.connect(
+                    host=self.host,
+                    port=self.port,
+                    clientId=self.client_id
+                )
+                
+                # Success!
+                self.connected = True
+                logger.info("✅ Reconnected to TWS")
+                
+                # Ensure watchdog is running
+                if not self.watchdog.is_alive():
+                     try:
+                        self.watchdog.start()
+                     except RuntimeError:
+                        # Thread might be already started but not alive if it finished?
+                        # Re-create watchdog if it finished
+                        self.watchdog = ConnectionWatchdog(self)
+                        self.watchdog.start()
+
+                return True
+                
+            except ConnectionRefusedError:
+                logger.warning(
+                    f"⚠️ Reconnection attempt {attempt} failed: Connection refused. "
+                    f"Retrying in {self.reconnect_interval}s..."
+                )
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Reconnection attempt {attempt} failed: {e}. "
+                    f"Retrying in {self.reconnect_interval}s..."
+                )
+            
+            # Wait before next attempt
+            time.sleep(self.reconnect_interval)
     
     def get_contract(self, symbol: str) -> Optional[Contract]:
         """
@@ -171,7 +370,7 @@ class IBKRBridge:
         Execute a market order trade.
         
         Creates a MarketOrder and places it asynchronously.
-        Logs the trade execution.
+        Verifies connection before execution and attempts reconnect if needed.
         
         Args:
             action: Order action ("BUY" or "SELL")
@@ -181,8 +380,32 @@ class IBKRBridge:
         Returns:
             Order object if placed successfully, None otherwise
         """
-        # Safety check: Ensure connected before trading
-        if not self.connected:
+        # Safety check: Verify connection using ib_insync's isConnected() before trading
+        if not self.ib.isConnected():
+            logger.warning(
+                f"⚠️ Not connected to IBKR before trade execution. "
+                f"Attempting immediate reconnect..."
+            )
+            self.connected = False
+            
+            # Attempt immediate reconnect (single attempt, no long retry loop)
+            try:
+                self.ib.connect(
+                    host=self.host,
+                    port=self.port,
+                    clientId=self.client_id
+                )
+                self.connected = True
+                logger.info("✅ Reconnected to TWS before trade execution")
+            except Exception as e:
+                logger.error(
+                    f"❌ Cannot execute trade: failed to reconnect to IBKR. "
+                    f"Error: {e}. Ensure TWS/IB Gateway is running."
+                )
+                return None
+        
+        # Double-check connection state
+        if not self.connected or not self.ib.isConnected():
             logger.error(
                 f"❌ Cannot execute trade: not connected to IBKR. "
                 f"Call connect() first or ensure TWS/IB Gateway is running."
@@ -233,8 +456,46 @@ class IBKRBridge:
             )
             return None
     
+    def get_positions(self) -> list[str]:
+        """
+        Get list of symbols for current open positions.
+        
+        Returns:
+            List of symbols (e.g. ['NVDA', 'BTC-USD'])
+        """
+        if not self.connected:
+            logger.warning("Cannot get positions: not connected")
+            return []
+            
+        try:
+            positions = self.ib.positions()
+            symbols = []
+            for p in positions:
+                if p.position != 0:
+                    # Extract symbol from contract
+                    # ib_insync Contract.localSymbol or symbol?
+                    # For crypto it might be 'BTC', need to reconstruct 'BTC-USD' if possible
+                    # Or just use p.contract.symbol
+                    symbol = p.contract.symbol
+                    # Heuristic for crypto: if exchange is PAXOS, append -USD? 
+                    # Or rely on Orchestrator logic. 
+                    # User request: "Integration... check_correlation_risk(symbol, current_positions)"
+                    
+                    # If it's crypto on PAXOS/GEMINI, ib_insync usually has symbol='BTC'
+                    if p.contract.secType == 'CRYPTO':
+                        symbol = f"{symbol}-USD"
+                        
+                    symbols.append(symbol)
+            return symbols
+        except Exception as e:
+            logger.error(f"Error getting positions: {e}")
+            return []
+
     def disconnect(self):
         """Disconnect from TWS/IB Gateway."""
+        if self.watchdog and self.watchdog.is_alive():
+            self.watchdog.stop()
+
         if not self.connected:
             logger.debug("Not connected, nothing to disconnect")
             return
@@ -251,10 +512,18 @@ class IBKRBridge:
         """
         Check if connected to IBKR.
         
+        Uses ib_insync's internal isConnected() for accurate state.
+        
         Returns:
             True if connected, False otherwise
         """
-        return self.connected
+        # Use ib_insync's internal connection state for accuracy
+        is_connected = self.ib.isConnected()
+        
+        # Sync internal flag with actual state
+        self.connected = is_connected
+        
+        return is_connected
     
     def __enter__(self):
         """Context manager entry."""

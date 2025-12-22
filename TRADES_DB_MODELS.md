@@ -172,3 +172,8 @@ Both tables are created in the same SQLite database (`data/fuggerbot.db`).
 
 
 
+
+
+
+
+

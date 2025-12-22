@@ -43,3 +43,7 @@ st.sidebar.caption("Navigate using the menu above ☝️")
 pg = st.navigation(pages)
 pg.run()
 
+
+
+
+

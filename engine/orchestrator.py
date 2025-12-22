@@ -28,6 +28,9 @@ from services.news_fetcher import NewsFetcher
 # Level 4 Policy Agent
 from agents.trm.risk_policy_agent import RiskPolicyAgent, TRMInput, FinalVerdict
 
+# Task C: Portfolio Manager
+from agents.portfolio_manager import PortfolioManager
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("engine.orchestrator")
@@ -96,6 +99,9 @@ class TradeOrchestrator:
         
         # Initialize Level 4 Policy Agent
         self.risk_policy = RiskPolicyAgent()
+        
+        # Initialize Portfolio Manager (Task C)
+        self.portfolio_manager = PortfolioManager()
         
         # Initialize Execution Bridge
         # We default to Paper Trading port (7497). Change to 7496 for Live.
@@ -538,6 +544,29 @@ class TradeOrchestrator:
 
         # Use Final Verdict for execution decision
         if final_verdict.decision == ReasoningDecision.APPROVE and not final_verdict.veto_applied:
+            
+            # --- TASK C: PORTFOLIO LEVEL CHECK ---
+            correlation_risk_ok = True
+            if self.broker and self.broker.is_connected():
+                current_positions = self.broker.get_positions()
+                if not self.portfolio_manager.check_correlation_risk(symbol, current_positions):
+                    correlation_risk_ok = False
+            
+            if not correlation_risk_ok:
+                logger.warning(f"⚠️ [EXECUTION] REJECTED: High Correlation Risk for {symbol}")
+                return TradeDecision(
+                    symbol=symbol,
+                    decision="REJECT",
+                    stage="portfolio_risk",
+                    reason="Portfolio Correlation limit exceeded (>0.8)",
+                    forecast_output=forecast_output,
+                    trust_evaluation=trust_result,
+                    llm_response=llm_decision,
+                    final_verdict=final_verdict,
+                    news_digest=news_digest,
+                    memory_narrative=memory_narrative
+                )
+
             processing_time = time.time() - start_time
             
             # Determine Size

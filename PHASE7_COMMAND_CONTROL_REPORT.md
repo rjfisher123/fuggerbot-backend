@@ -335,3 +335,7 @@ log_dir = project_root / "custom_log_dir"
 **Version:** v2.6 - Command & Control Dashboard  
 **Deployment:** Restart launcher to activate Trade Reviewer
 
+
+
+
+

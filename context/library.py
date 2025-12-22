@@ -225,3 +225,8 @@ def get_regimes_by_type(regime_type: RegimeType) -> List[MacroRegime]:
     return [regime for regime in HISTORICAL_REGIMES if regime.regime_type == regime_type]
 
 
+
+
+
+
+

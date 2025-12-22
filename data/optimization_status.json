@@ -1,5 +1,5 @@
 {
-  "last_run": "2025-12-11T12:56:17.067143",
+  "last_run": "2025-12-14T00:00:13.013389",
   "status": "SUCCESS",
   "steps": {
     "miner": {
@@ -18,5 +18,5 @@
       "file_updated": true
     }
   },
-  "duration_seconds": 5.755417108535767
+  "duration_seconds": 9.089423894882202
 }
