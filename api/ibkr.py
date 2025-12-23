@@ -41,19 +41,6 @@ class ConnectRequest(BaseModel):
     port: Optional[int] = None
 
 @router.post("/connect", response_model=ConnectResponse)
-async def connect_ibkr(request: ConnectRequest = None, paper_trading: bool = False):
-    """
-    Attempt to connect to IBKR Gateway/TWS.
-    Optionally specify a custom port in JSON body: {"port": 7497}
-    """
-    try:
-        # Resolve port override if provided
-        custom_port = request.port if request else None
-        
-        # Get client (forcing update if port changed? requires logic in get_ibkr_client)
-        # Note: get_ibkr_client uses singletons. We might need to recreate if port differs.
-        # For simplicity, we'll try to update the existing client's configuration if needed.
-        client = get_ibkr_client(paper_trading=paper_trading)
 async def connect_ibkr(request: ConnectRequest):
     """
     Connect to IBKR TWS/Gateway.

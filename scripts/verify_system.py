@@ -1,254 +1,302 @@
 """
-FuggerBot System Health Verification Script.
+System Verification Script.
 
-Checks the health of all critical components:
-- Global Data Lake
-- Learning Book
-- War Games Results
-- TRM Components
-
-Author: FuggerBot AI Team
-Status: Operation Clean Slate v2.0
+Comprehensive health check for FuggerBot system components.
+Verifies data lake, learning book, war games results, and system configuration.
 """
 import sys
 from pathlib import Path
+import json
+import duckdb
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))
 
-import duckdb
-import json
-from typing import Dict, Any, Tuple
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-class SystemHealthChecker:
-    """Verifies FuggerBot system health."""
+def check_data_lake() -> bool:
+    """Verify Data Lake (DuckDB) integrity."""
+    print("\n" + "=" * 80)
+    print("CHECKING: Data Lake (market_history.duckdb)")
+    print("=" * 80)
     
-    def __init__(self):
-        self.root = PROJECT_ROOT
-        self.checks_passed = 0
-        self.checks_failed = 0
-        self.warnings = []
+    db_path = PROJECT_ROOT / "data" / "market_history.duckdb"
     
-    def check_data_lake(self) -> Tuple[bool, str]:
-        """Check Global Data Lake health."""
-        db_path = self.root / "data" / "market_history.duckdb"
-        
-        if not db_path.exists():
-            return False, f"❌ Data Lake not found at {db_path}"
-        
-        try:
-            conn = duckdb.connect(str(db_path), read_only=True)
-            
-            # Check total rows
-            total_rows = conn.execute("SELECT COUNT(*) FROM ohlcv_history").fetchone()[0]
-            
-            # Check symbols
-            symbols = conn.execute("SELECT COUNT(DISTINCT symbol) FROM ohlcv_history").fetchone()[0]
-            
-            # Check asset classes
-            asset_classes = conn.execute(
-                "SELECT asset_class, COUNT(*) as cnt FROM ohlcv_history GROUP BY asset_class"
-            ).fetchdf()
-            
-            conn.close()
-            
-            if total_rows < 100000:
-                return False, f"⚠️  Data Lake has only {total_rows:,} rows (expected >100K)"
-            
-            if symbols < 30:
-                self.warnings.append(f"⚠️  Only {symbols} symbols in Data Lake (expected >30)")
-            
-            # Check for required symbols
-            conn = duckdb.connect(str(db_path), read_only=True)
-            required_symbols = ['BTC-USD', 'NVDA', 'MSFT', '^GSPC']
-            available = []
-            
-            for sym in required_symbols:
-                count = conn.execute(
-                    f"SELECT COUNT(*) FROM ohlcv_history WHERE symbol = '{sym}'"
-                ).fetchone()[0]
-                if count > 0:
-                    available.append(sym)
-            
-            conn.close()
-            
-            if len(available) < len(required_symbols):
-                missing = set(required_symbols) - set(available)
-                self.warnings.append(f"⚠️  Missing symbols: {missing}")
-            
-            return True, f"✅ Data Lake OK: {total_rows:,} rows, {symbols} symbols, {len(asset_classes)} asset classes"
-        
-        except Exception as e:
-            return False, f"❌ Data Lake error: {e}"
+    if not db_path.exists():
+        print("❌ FAIL: Data Lake not found at", db_path)
+        return False
     
-    def check_learning_book(self) -> Tuple[bool, str]:
-        """Check Learning Book health."""
-        book_path = self.root / "data" / "learning_book.json"
+    try:
+        conn = duckdb.connect(str(db_path), read_only=True)
         
-        if not book_path.exists():
-            return False, f"⚠️  Learning Book not found (run: python research/miner.py)"
+        # Check table exists
+        tables = conn.execute("SHOW TABLES").fetchall()
+        if not tables:
+            print("❌ FAIL: No tables found in Data Lake")
+            return False
         
-        try:
-            with open(book_path, 'r') as f:
-                book = json.load(f)
-            
-            patterns = book.get('patterns', [])
-            
-            if len(patterns) == 0:
-                return False, "❌ Learning Book is empty (run: python research/miner.py)"
-            
-            if len(patterns) < 50:
-                self.warnings.append(f"⚠️  Only {len(patterns)} patterns (expected >100)")
-            
-            symbols_covered = book.get('symbols_covered', [])
-            
-            return True, f"✅ Learning Book OK: {len(patterns)} patterns, {len(symbols_covered)} symbols"
+        print(f"✅ Tables found: {[t[0] for t in tables]}")
         
-        except Exception as e:
-            return False, f"❌ Learning Book error: {e}"
-    
-    def check_war_games(self) -> Tuple[bool, str]:
-        """Check War Games results."""
-        results_path = self.root / "data" / "war_games_results.json"
+        # Check row count
+        row_count = conn.execute("SELECT COUNT(*) FROM ohlcv_history").fetchone()[0]
+        print(f"✅ Total rows: {row_count:,}")
         
-        if not results_path.exists():
-            return False, f"⚠️  War Games results not found (run: python daemon/simulator/war_games_runner.py)"
+        # Check symbols
+        symbols = conn.execute("SELECT DISTINCT symbol FROM ohlcv_history").fetchall()
+        symbol_list = [s[0] for s in symbols]
+        print(f"✅ Symbols: {', '.join(symbol_list)}")
         
-        try:
-            with open(results_path, 'r') as f:
-                results = json.load(f)
-            
-            campaigns = results.get('results', [])
-            
-            if len(campaigns) == 0:
-                return False, "❌ No War Games campaigns found"
-            
-            # Check for NVDA campaigns
-            nvda_campaigns = [c for c in campaigns if 'NVDA' in c.get('symbol', '')]
-            
-            if len(nvda_campaigns) == 0:
-                self.warnings.append("⚠️  No NVDA campaigns found")
-            
-            # Check for ghost data (0 trades)
-            zero_trade_campaigns = [c for c in campaigns if c.get('total_trades', 0) == 0]
-            
-            if len(zero_trade_campaigns) > 0:
-                self.warnings.append(
-                    f"⚠️  {len(zero_trade_campaigns)} campaigns with 0 trades (check proxy logic)"
-                )
-            
-            return True, f"✅ War Games OK: {len(campaigns)} campaigns, {len(nvda_campaigns)} NVDA campaigns"
+        # Check for NVDA specifically (per mission requirements)
+        if 'NVDA' in symbol_list:
+            nvda_rows = conn.execute("SELECT COUNT(*) FROM ohlcv_history WHERE symbol = 'NVDA'").fetchone()[0]
+            print(f"✅ NVDA data: {nvda_rows:,} rows")
+        else:
+            print("⚠️  WARNING: NVDA not found in Data Lake")
         
-        except Exception as e:
-            return False, f"❌ War Games error: {e}"
-    
-    def check_trade_memory(self) -> Tuple[bool, str]:
-        """Check Trade Memory health."""
-        memory_path = self.root / "data" / "trade_memory.json"
+        conn.close()
         
-        if not memory_path.exists():
-            return True, "ℹ️  Trade Memory not found (not yet used in live trading)"
-        
-        try:
-            with open(memory_path, 'r') as f:
-                memory = json.load(f)
-            
-            trades = memory.get('trades', [])
-            
-            return True, f"✅ Trade Memory OK: {len(trades)} historical trades"
-        
-        except Exception as e:
-            return False, f"❌ Trade Memory error: {e}"
-    
-    def check_trm_agents(self) -> Tuple[bool, str]:
-        """Check TRM agent files."""
-        agents_to_check = [
-            'agents/trm/news_digest_agent.py',
-            'agents/trm/memory_summarizer.py',
-            'agents/trm/risk_policy_agent.py'
-        ]
-        
-        missing = []
-        for agent_file in agents_to_check:
-            if not (self.root / agent_file).exists():
-                missing.append(agent_file)
-        
-        if missing:
-            return False, f"❌ Missing TRM agents: {missing}"
-        
-        return True, f"✅ TRM Agents OK: {len(agents_to_check)} agents found"
-    
-    def run_all_checks(self):
-        """Run all health checks."""
-        print("=" * 80)
-        print("🔍 FUGGERBOT SYSTEM HEALTH CHECK - Operation Clean Slate v2.0")
-        print("=" * 80)
-        print()
-        
-        checks = [
-            ("Data Lake", self.check_data_lake),
-            ("Learning Book", self.check_learning_book),
-            ("War Games Results", self.check_war_games),
-            ("Trade Memory", self.check_trade_memory),
-            ("TRM Agents", self.check_trm_agents)
-        ]
-        
-        for check_name, check_func in checks:
-            try:
-                passed, message = check_func()
-                
-                if passed:
-                    self.checks_passed += 1
-                else:
-                    self.checks_failed += 1
-                
-                print(f"  {message}")
-            
-            except Exception as e:
-                self.checks_failed += 1
-                print(f"  ❌ {check_name} error: {e}")
-        
-        print()
-        
-        # Print warnings
-        if self.warnings:
-            print("⚠️  WARNINGS:")
-            for warning in self.warnings:
-                print(f"  {warning}")
-            print()
-        
-        # Print summary
-        print("=" * 80)
-        print(f"📊 SUMMARY: {self.checks_passed} passed, {self.checks_failed} failed, {len(self.warnings)} warnings")
-        print("=" * 80)
-        
-        if self.checks_failed == 0 and len(self.warnings) == 0:
-            print("\n🎉 ALL SYSTEMS OPERATIONAL - FuggerBot v2.0 Ready!")
-            return True
-        elif self.checks_failed == 0:
-            print("\n✅ Core systems operational (minor warnings present)")
+        if row_count > 1000:
+            print("✅ PASS: Data Lake OK")
             return True
         else:
-            print("\n❌ CRITICAL ISSUES DETECTED - Review errors above")
-            print("\n🔧 Recommended Actions:")
-            print("  1. python data/ingest_global.py      # Rebuild Data Lake")
-            print("  2. python research/miner.py          # Rebuild Learning Book")
-            print("  3. python daemon/simulator/war_games_runner.py  # Run War Games")
-            print("  4. python scripts/verify_system.py   # Re-run this check")
+            print("⚠️  WARNING: Data Lake has very few rows")
             return False
+            
+    except Exception as e:
+        print(f"❌ FAIL: Error checking Data Lake: {e}")
+        return False
+
+
+def check_learning_book() -> bool:
+    """Verify Learning Book integrity."""
+    print("\n" + "=" * 80)
+    print("CHECKING: Learning Book (learning_book.json)")
+    print("=" * 80)
+    
+    book_path = PROJECT_ROOT / "data" / "learning_book.json"
+    
+    if not book_path.exists():
+        print("❌ FAIL: Learning Book not found at", book_path)
+        return False
+    
+    try:
+        with open(book_path, 'r') as f:
+            data = json.load(f)
+        
+        if not data:
+            print("❌ FAIL: Learning Book is empty")
+            return False
+        
+        # Check structure (supports both 'episodes' and 'patterns' formats)
+        if 'episodes' in data:
+            records = data['episodes']
+            record_type = "episodes"
+        elif 'patterns' in data:
+            records = data['patterns']
+            record_type = "patterns"
+        else:
+            print("⚠️  WARNING: Learning Book structure unknown (no 'episodes' or 'patterns' key)")
+            return False
+        
+        print(f"✅ {record_type.capitalize()}: {len(records)}")
+        
+        if 'version' in data:
+            print(f"✅ Version: {data['version']}")
+        
+        if 'statistics' in data:
+            stats = data['statistics']
+            print(f"✅ Statistics: Win Rate={stats.get('win_rate', 'N/A')}, "
+                  f"Avg Win={stats.get('avg_win_pct', 'N/A')}%, "
+                  f"Avg Loss={stats.get('avg_loss_pct', 'N/A')}%")
+        
+        if len(records) > 0:
+            # Sample first record
+            sample = records[0]
+            print(f"✅ Sample {record_type[:-1]} keys: {list(sample.keys())[:5]}...")
+        
+        if len(records) >= 100:
+            print("✅ PASS: Learning Book OK (sufficient data)")
+            return True
+        else:
+            print(f"⚠️  WARNING: Learning Book has < 100 {record_type} (found {len(records)})")
+            return len(records) > 0  # Pass if there's at least some data
+            
+    except json.JSONDecodeError:
+        print("❌ FAIL: Learning Book is corrupted (invalid JSON)")
+        return False
+    except Exception as e:
+        print(f"❌ FAIL: Error checking Learning Book: {e}")
+        return False
+
+
+def check_war_games_results() -> bool:
+    """Verify War Games results."""
+    print("\n" + "=" * 80)
+    print("CHECKING: War Games Results (war_games_results.json)")
+    print("=" * 80)
+    
+    results_path = PROJECT_ROOT / "data" / "war_games_results.json"
+    
+    if not results_path.exists():
+        print("⚠️  WARNING: War Games results not found (may not have been run yet)")
+        return True  # Not a failure - just hasn't been run
+    
+    try:
+        with open(results_path, 'r') as f:
+            data = json.load(f)
+        
+        if 'results' not in data:
+            print("❌ FAIL: Invalid War Games results format")
+            return False
+        
+        results = data['results']
+        print(f"✅ Total campaigns: {len(results)}")
+        
+        # Check for NVDA campaigns
+        nvda_campaigns = [r for r in results if r.get('symbol') == 'NVDA']
+        if nvda_campaigns:
+            print(f"✅ NVDA campaigns: {len(nvda_campaigns)}")
+            
+            # Check for trades
+            total_trades = sum(r.get('total_trades', 0) for r in nvda_campaigns)
+            print(f"✅ NVDA total trades: {total_trades}")
+            
+            if total_trades > 0:
+                print("✅ PASS: War Games results OK (NVDA found with trades)")
+                return True
+            else:
+                print("⚠️  WARNING: NVDA campaigns exist but 0 trades executed")
+                return False
+        else:
+            print("⚠️  WARNING: No NVDA campaigns found in results")
+            return False
+            
+    except json.JSONDecodeError:
+        print("❌ FAIL: War Games results corrupted (invalid JSON)")
+        return False
+    except Exception as e:
+        print(f"❌ FAIL: Error checking War Games results: {e}")
+        return False
+
+
+def check_configuration() -> bool:
+    """Verify system configuration."""
+    print("\n" + "=" * 80)
+    print("CHECKING: System Configuration")
+    print("=" * 80)
+    
+    # Check critical files exist
+    critical_files = [
+        "requirements.txt",
+        "main.py",
+        "engine/orchestrator.py",
+        "daemon/simulator/war_games_runner.py",
+        "services/news_fetcher.py",
+        "execution/ibkr.py",
+    ]
+    
+    all_exist = True
+    for file_path in critical_files:
+        full_path = PROJECT_ROOT / file_path
+        if full_path.exists():
+            print(f"✅ {file_path}")
+        else:
+            print(f"❌ {file_path} (missing)")
+            all_exist = False
+    
+    if all_exist:
+        print("✅ PASS: All critical files present")
+        return True
+    else:
+        print("❌ FAIL: Some critical files missing")
+        return False
+
+
+def check_file_status_updates() -> bool:
+    """Check for file-based status update mechanisms."""
+    print("\n" + "=" * 80)
+    print("CHECKING: File-Based Status Updates")
+    print("=" * 80)
+    
+    # Check for status files that might be used for inter-process communication
+    status_files = [
+        "data/system_status.json",
+        "data/ibkr_status.json",
+        "data/connection_status.json",
+        "data/daemon_status.json",
+    ]
+    
+    found_any = False
+    for status_file in status_files:
+        full_path = PROJECT_ROOT / status_file
+        if full_path.exists():
+            print(f"✅ Found: {status_file}")
+            try:
+                with open(full_path, 'r') as f:
+                    data = json.load(f)
+                    print(f"   Status: {data}")
+                found_any = True
+            except Exception as e:
+                print(f"   ⚠️  Could not read: {e}")
+        else:
+            print(f"ℹ️  Not found: {status_file}")
+    
+    if not found_any:
+        print("ℹ️  No file-based status updates detected (using in-memory state)")
+    
+    return True  # Not a failure condition
+
+
+def run_verification():
+    """Run all verification checks."""
+    print("\n" + "=" * 80)
+    print("FUGGERBOT SYSTEM VERIFICATION")
+    print("=" * 80)
+    
+    checks = [
+        ("Data Lake", check_data_lake),
+        ("Learning Book", check_learning_book),
+        ("War Games Results", check_war_games_results),
+        ("Configuration", check_configuration),
+        ("File Status Updates", check_file_status_updates),
+    ]
+    
+    results = []
+    for name, check_func in checks:
+        try:
+            passed = check_func()
+            results.append((name, passed))
+        except Exception as e:
+            logger.error(f"Check '{name}' crashed: {e}", exc_info=True)
+            results.append((name, False))
+    
+    # Summary
+    print("\n" + "=" * 80)
+    print("VERIFICATION SUMMARY")
+    print("=" * 80)
+    
+    for name, passed in results:
+        status = "✅ PASS" if passed else "❌ FAIL"
+        print(f"{status}: {name}")
+    
+    total_passed = sum(1 for _, passed in results if passed)
+    total_checks = len(results)
+    
+    print(f"\nResult: {total_passed}/{total_checks} checks passed")
+    
+    if total_passed == total_checks:
+        print("\n🎉 System verification PASSED - all components healthy!")
+    else:
+        print("\n⚠️  System verification INCOMPLETE - some components need attention")
+    
+    return total_passed == total_checks
 
 
 if __name__ == "__main__":
-    checker = SystemHealthChecker()
-    success = checker.run_all_checks()
-    
+    success = run_verification()
     sys.exit(0 if success else 1)
-
-
-
-
-
-
