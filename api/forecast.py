@@ -48,70 +48,91 @@ class CreateForecastRequest(BaseModel):
     )
 
 
-class ForecastResponse(BaseModel):
-    """Response model for forecast data."""
-    
+class RichForecastResponse(BaseModel):
+    """
+    Rich Response model with full context.
+    """
     forecast_id: str
     symbol: str
     created_at: str
-    forecast_horizon: int
-    model_name: str
-    params: Dict[str, Any]
-    trust_score: float
-    fqs_score: Optional[float] = None
-    regime: Optional[Dict[str, Any]] = None
-    frs_score: Optional[float] = None
-    coherence: Optional[Dict[str, Any]] = None
-    recommendation: Optional[Dict[str, Any]] = None
-    metadata: Dict[str, Any]
     
+    # Core Data
+    price_target: Optional[float] = Field(None, description="Projected price at horizon end")
+    confidence: float = Field(..., description="Overall Trust Score (0-1)")
+    
+    # Rich Context
+    technicals: Optional[Dict[str, Any]] = Field(None, description="Technical Indicators (RSI, MACD)")
+    regime: Optional[str] = Field(None, description="Market Regime (e.g. Bullish Trending)")
+    news_summary: Optional[str] = Field(None, description="Relevant News Headlines")
+    reasoning: Optional[str] = Field(None, description="AI Rationale")
+    
+    # Raw Data (for debugging/charts)
+    forecast_horizon: int
+    predicted_values: List[float] = Field(default=[], description="Point forecast series")
+    lower_bound: List[float] = Field(default=[], description="Lower confidence bound")
+    upper_bound: List[float] = Field(default=[], description="Upper confidence bound")
+    
+    metadata: Dict[str, Any]
+
     class Config:
-        """Pydantic config."""
         json_encoders = {
             datetime: lambda v: v.isoformat(),
         }
 
-
-@router.post("", response_model=ForecastResponse, status_code=status.HTTP_201_CREATED)
-async def create_forecast_endpoint(request: CreateForecastRequest) -> ForecastResponse:
+@router.post("", response_model=RichForecastResponse, status_code=status.HTTP_201_CREATED)
+async def create_forecast_endpoint(request: CreateForecastRequest) -> RichForecastResponse:
     """
-    Create a new forecast.
-    
-    Args:
-        request: Forecast creation request with symbol, historical prices, and options
-    
-    Returns:
-        ForecastResponse with created forecast data
-    
-    Raises:
-        HTTPException: If forecast creation fails
+    Create a new forecast with RICH context.
     """
     try:
         logger.info(f"Creating forecast for {request.symbol} via API")
         
         # Create forecast using service
-        forecast = create_forecast(
+        forecast = await create_forecast(
             symbol=request.symbol,
             historical_prices=request.historical_prices,
             forecast_horizon=request.forecast_horizon,
             options=request.options
         )
         
-        # Convert to response model
-        response = ForecastResponse(
+        # Extract Rich Data
+        meta = forecast.metadata or {}
+        technicals = meta.get("technicals", {})
+        regime_data = forecast.regime or {}
+        
+        # Get price target (last point of forecast)
+        price_target = None
+        predicted_values = []
+        lower_bound = []
+        upper_bound = []
+        
+        if forecast.predicted_series:
+             predicted_values = forecast.predicted_series.point_forecast or []
+             lower_bound = forecast.predicted_series.lower_bound or []
+             upper_bound = forecast.predicted_series.upper_bound or []
+             if predicted_values:
+                 price_target = predicted_values[-1]
+
+        # Construct Rich Response
+        response = RichForecastResponse(
             forecast_id=forecast.forecast_id,
             symbol=forecast.symbol,
             created_at=forecast.created_at.isoformat(),
+            
+            price_target=price_target,
+            confidence=forecast.trust_score,
+            
+            technicals=technicals,
+            regime=regime_data.get("regime", "Unknown"),
+            news_summary=meta.get("news_context", "No news available"),
+            reasoning=meta.get("frs_interpretation", "No rationale generated"),
+            
             forecast_horizon=forecast.forecast_horizon,
-            model_name=forecast.model_name,
-            params=forecast.params,
-            trust_score=forecast.trust_score,
-            fqs_score=forecast.fqs_score,
-            regime=forecast.regime,
-            frs_score=forecast.frs_score,
-            coherence=forecast.coherence,
-            recommendation=forecast.recommendation,
-            metadata=forecast.metadata
+            predicted_values=predicted_values,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
+            
+            metadata=meta
         )
         
         logger.info(f"Forecast {forecast.forecast_id} created successfully via API")
@@ -119,253 +140,95 @@ async def create_forecast_endpoint(request: CreateForecastRequest) -> ForecastRe
         
     except ValueError as e:
         logger.error(f"Invalid forecast request: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating forecast: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create forecast: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to create forecast: {str(e)}")
 
 
-@router.get("/{forecast_id}", response_model=ForecastResponse)
-async def get_forecast_endpoint(forecast_id: str) -> ForecastResponse:
-    """
-    Retrieve a forecast by ID.
-    
-    Args:
-        forecast_id: Forecast ID to retrieve
-    
-    Returns:
-        ForecastResponse with forecast data
-    
-    Raises:
-        HTTPException: If forecast not found
-    """
+@router.get("/{forecast_id}", response_model=RichForecastResponse)
+async def get_forecast_endpoint(forecast_id: str) -> RichForecastResponse:
+    """Retrieve a forecast by ID."""
     try:
-        logger.info(f"Retrieving forecast {forecast_id} via API")
-        
-        # Get forecast using service
         forecast = get_forecast(forecast_id)
-        
         if not forecast:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Forecast {forecast_id} not found"
-            )
+            raise HTTPException(status_code=404, detail="Forecast not found")
+            
+        # Extract Rich Data (logic duplicated from create, ideally helper function)
+        meta = forecast.metadata or {}
+        predicted_values = forecast.predicted_series.point_forecast if forecast.predicted_series else []
+        price_target = predicted_values[-1] if predicted_values else None
         
-        # Convert to response model
-        response = ForecastResponse(
+        return RichForecastResponse(
             forecast_id=forecast.forecast_id,
             symbol=forecast.symbol,
             created_at=forecast.created_at.isoformat(),
+            price_target=price_target,
+            confidence=forecast.trust_score,
+            technicals=meta.get("technicals", {}),
+            regime=forecast.regime.get("regime", "Unknown") if forecast.regime else "Unknown",
+            news_summary=meta.get("news_context"),
+            reasoning=meta.get("frs_interpretation"),
             forecast_horizon=forecast.forecast_horizon,
-            model_name=forecast.model_name,
-            params=forecast.params,
-            trust_score=forecast.trust_score,
-            fqs_score=forecast.fqs_score,
-            regime=forecast.regime,
-            frs_score=forecast.frs_score,
-            coherence=forecast.coherence,
-            recommendation=forecast.recommendation,
-            metadata=forecast.metadata
+            predicted_values=predicted_values,
+            lower_bound=forecast.predicted_series.lower_bound if forecast.predicted_series else [],
+            upper_bound=forecast.predicted_series.upper_bound if forecast.predicted_series else [],
+            metadata=meta
         )
-        
-        return response
-        
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving forecast {forecast_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve forecast: {str(e)}"
-        )
+        logger.error(f"Error retrieving forecast: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# Dashboard endpoints
-@dashboard_router.get("/forecast", response_class=HTMLResponse)
-async def forecast_dashboard(request: Request):
+class GenerateForecastRequest(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=10)
+    forecast_horizon: int = Field(30, ge=1, le=365)
+    
+@router.post("/generate", response_model=RichForecastResponse)
+async def generate_forecast_simple(request: GenerateForecastRequest):
     """
-    Render the forecast dashboard form.
-    
-    Args:
-        request: FastAPI request object
-    
-    Returns:
-        HTML response with forecast form
+    Generate a forecast by symbol.
     """
-    html_content = render_template(
-        "forecast.html",
-        {
-            "symbol": None,
-            "forecast_horizon": 30,
-            "historical_period": 252,
-            "context_length": None,
-            "strict_mode": False,
-            "deterministic_mode": False,
-            "min_trust_score": 0.5,
-            "forecast_result": None,
-            "error": None
-        }
-    )
-    return HTMLResponse(content=html_content)
-
-
-@dashboard_router.post("/forecast", response_class=HTMLResponse)
-async def forecast_dashboard_submit(
-    request: Request,
-    symbol: str = Form(...),
-    forecast_horizon: int = Form(30),
-    historical_period: Optional[int] = Form(None),
-    context_length: Optional[int] = Form(None),
-    strict_mode: bool = Form(False),
-    deterministic_mode: bool = Form(False),
-    min_trust_score: float = Form(0.5)
-):
-    """
-    Handle forecast form submission.
-    
-    Args:
-        request: FastAPI request object
-        symbol: Trading symbol
-        forecast_horizon: Forecast horizon in days
-        historical_period: Historical period in days (optional)
-        context_length: Context length (optional)
-        strict_mode: Enable strict mode
-        deterministic_mode: Enable deterministic mode
-        min_trust_score: Minimum trust score
-    
-    Returns:
-        HTML response with forecast result or error
-    """
-    error = None
-    forecast_result = None
-    
     try:
-        # Validate symbol
-        symbol = symbol.upper().strip()
-        if not symbol or len(symbol) > 10:
-            error = "Invalid symbol. Must be 1-10 characters."
-            html_content = render_template(
-                "forecast.html",
-                {
-                    "symbol": symbol,
-                    "forecast_horizon": forecast_horizon,
-                    "historical_period": historical_period or 252,
-                    "context_length": context_length,
-                    "strict_mode": strict_mode,
-                    "deterministic_mode": deterministic_mode,
-                    "min_trust_score": min_trust_score,
-                    "forecast_result": None,
-                    "error": error
-                }
-            )
-            return HTMLResponse(content=html_content)
-        
-        # Fetch historical prices
+        symbol = request.symbol.upper().strip()
         logger.info(f"Fetching historical prices for {symbol}...")
-        
-        # Calculate period string from historical_period
-        if historical_period:
-            if historical_period <= 5:
-                period = "5d"
-            elif historical_period <= 30:
-                period = "1mo"
-            elif historical_period <= 90:
-                period = "3mo"
-            elif historical_period <= 180:
-                period = "6mo"
-            elif historical_period <= 365:
-                period = "1y"
-            elif historical_period <= 730:
-                period = "2y"
-            else:
-                period = "5y"
-        else:
-            period = "1y"
-        
-        historical_prices = get_historical_prices(symbol, period=period)
+        historical_prices = get_historical_prices(symbol, period="1y") 
         
         if not historical_prices or len(historical_prices) < 20:
-            error = f"Could not fetch sufficient historical data for {symbol}. Please check the symbol is valid."
-            html_content = render_template(
-                "forecast.html",
-                {
-                    "symbol": symbol,
-                    "forecast_horizon": forecast_horizon,
-                    "historical_period": historical_period or 252,
-                    "context_length": context_length,
-                    "strict_mode": strict_mode,
-                    "deterministic_mode": deterministic_mode,
-                    "min_trust_score": min_trust_score,
-                    "forecast_result": None,
-                    "error": error
-                }
-            )
-            return HTMLResponse(content=html_content)
-        
-        # Build options dict
-        options = {}
-        if context_length:
-            options["context_length"] = context_length
-        if historical_period:
-            options["historical_period"] = historical_period
-        if strict_mode:
-            options["strict_mode"] = True
-        if deterministic_mode:
-            options["deterministic_mode"] = True
-        if min_trust_score:
-            options["min_trust_score"] = min_trust_score
-        
-        # Create forecast
-        logger.info(f"Creating forecast for {symbol} with horizon {forecast_horizon}...")
-        forecast = create_forecast(
+             raise HTTPException(status_code=400, detail=f"Insufficient data for {symbol}")
+
+        logger.info(f"Creating forecast for {symbol}...")
+        forecast = await create_forecast(
             symbol=symbol,
             historical_prices=historical_prices,
-            forecast_horizon=forecast_horizon,
-            options=options if options else None
+            forecast_horizon=request.forecast_horizon
         )
         
-        # Convert to response format for template
-        forecast_result = {
-            "forecast_id": forecast.forecast_id,
-            "symbol": forecast.symbol,
-            "forecast_horizon": forecast.forecast_horizon,
-            "trust_score": forecast.trust_score,
-            "fqs_score": forecast.fqs_score,
-            "regime": forecast.regime,
-            "frs_score": forecast.frs_score,
-            "coherence": forecast.coherence,
-            "recommendation": forecast.recommendation,
-            "created_at": forecast.created_at.isoformat()
-        }
+        # Populate Response
+        meta = forecast.metadata or {}
+        predicted_values = forecast.predicted_series.point_forecast if forecast.predicted_series else []
         
-        logger.info(f"Forecast {forecast.forecast_id} created successfully via dashboard")
-        
-    except ValueError as e:
-        error = f"Invalid input: {str(e)}"
-        logger.error(f"Forecast dashboard error: {e}")
+        return RichForecastResponse(
+            forecast_id=forecast.forecast_id,
+            symbol=forecast.symbol,
+            created_at=forecast.created_at.isoformat(),
+            price_target=predicted_values[-1] if predicted_values else None,
+            confidence=forecast.trust_score,
+            technicals=meta.get("technicals", {}),
+            regime=forecast.regime.get("regime", "Unknown") if forecast.regime else "Unknown",
+            news_summary=meta.get("news_context"),
+            reasoning=meta.get("frs_interpretation"),
+            forecast_horizon=forecast.forecast_horizon,
+            predicted_values=predicted_values,
+            lower_bound=forecast.predicted_series.lower_bound if forecast.predicted_series else [],
+            upper_bound=forecast.predicted_series.upper_bound if forecast.predicted_series else [],
+            metadata=meta
+        )
+
     except Exception as e:
-        error = f"Error creating forecast: {str(e)}"
-        logger.error(f"Forecast dashboard error: {e}", exc_info=True)
-    
-    html_content = render_template(
-        "forecast.html",
-        {
-            "symbol": symbol if 'symbol' in locals() else None,
-            "forecast_horizon": forecast_horizon,
-            "historical_period": historical_period or 252,
-            "context_length": context_length,
-            "strict_mode": strict_mode,
-            "deterministic_mode": deterministic_mode,
-            "min_trust_score": min_trust_score,
-            "forecast_result": forecast_result,
-            "error": error
-        }
-    )
-    return HTMLResponse(content=html_content)
+        logger.error(f"Error generating forecast: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 

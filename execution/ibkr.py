@@ -11,16 +11,17 @@ from typing import Optional, List, Dict
 from enum import Enum
 
 from services.risk_control_service import RiskControlService
-
-logger = logging.getLogger(__name__)
+from core.logger import logger
 
 # Lazy import ib_insync to handle import errors gracefully
 try:
-    from ib_insync import IB, Contract, Stock, Crypto, MarketOrder, Order
+    from ib_insync import IB, Contract, Stock, Crypto, MarketOrder, Order, LimitOrder
     IBKR_AVAILABLE = True
 except ImportError:
     IBKR_AVAILABLE = False
     logger.warning("ib_insync not installed. Install with: pip install ib_insync")
+
+import asyncio
 
 
 class OrderAction(str, Enum):
@@ -108,11 +109,29 @@ class ConnectionWatchdog(threading.Thread):
             time.sleep(2) # Cooldown
             
             logger.info("🐶 Watchdog attempting reconnect...")
-            self.bridge.connect(use_retry=True)
+            
+            # Use main loop if available (Asyncio/FastAPI mode)
+            if self.bridge.main_loop and self.bridge.main_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    self.bridge.connect_async(use_retry=True), 
+                    self.bridge.main_loop
+                )
+                # We don't wait for result here to avoid blocking watchdog?
+                # Actually, we should wait to confirm if it worked or sleep.
+                # But connection might take time.
+                try:
+                    future.result(timeout=15)
+                except Exception as e:
+                    logger.error(f"🐶 Async reconnect failed: {e}")
+            else:
+                # Fallback to sync mode
+                self.bridge.connect(use_retry=True)
             
         except Exception as e:
             logger.error(f"🐶 Reconnection failed: {e}")
 
+
+import os
 
 class IBKRBridge:
     """
@@ -123,8 +142,8 @@ class IBKRBridge:
     
     def __init__(
         self,
-        host: str = "127.0.0.1",
-        port: int = 7497,  # 7497 for Paper, 7496 for Live
+        host: str = None,
+        port: int = None,
         client_id: int = 1,
         reconnect_interval: int = 60,  # Seconds between reconnection attempts
         max_reconnect_attempts: int = 0  # 0 = infinite retries
@@ -133,12 +152,19 @@ class IBKRBridge:
         Initialize IBKR bridge.
         
         Args:
-            host: TWS/IB Gateway host (default: 127.0.0.1)
-            port: TWS/IB Gateway port (7497 for Paper, 7496 for Live)
+            host: TWS/IB Gateway host (default: env IBKR_HOST or 127.0.0.1)
+            port: TWS/IB Gateway port (default: env IBKR_PORT or 7497)
             client_id: Client ID for connection (default: 1)
             reconnect_interval: Seconds to wait between reconnection attempts (default: 60)
             max_reconnect_attempts: Maximum reconnection attempts (0 = infinite, default: 0)
         """
+        # Resolve defaults from Env or arguments
+        self.host = host or os.getenv("IBKR_HOST", "127.0.0.1")
+        if port:
+            self.port = port
+        else:
+            # Default to 7497 (Paper) unless specified
+            self.port = int(os.getenv("IBKR_PORT", 7497))
         if not IBKR_AVAILABLE:
             raise ImportError("ib_insync not installed. Install with: pip install ib_insync")
         
@@ -147,9 +173,14 @@ class IBKRBridge:
         self.client_id = client_id
         self.reconnect_interval = reconnect_interval
         self.max_reconnect_attempts = max_reconnect_attempts
-        self.ib = IB()
+        # Use Singleton Connection Manager to get IB instance
+        from execution.connection_manager import get_connection_manager
+        self.manager = get_connection_manager()
+        self.ib = self.manager.get_ib() # Use singleton's IB instance
+        
         self.connected = False
         self.is_paper_trading = (port == 7497)
+        self.main_loop = None # Capture main loop involved in async connection
         
         # Start Watchdog
         self.watchdog = ConnectionWatchdog(self)
@@ -165,20 +196,41 @@ class IBKRBridge:
             f"reconnect_interval={reconnect_interval}s, max_attempts={max_reconnect_attempts or 'infinite'}"
         )
     
+    async def connect_async(self, use_retry: bool = True) -> bool:
+        """
+        Async connect to TWS/IB Gateway.
+        """
+        if self.ib.isConnected():
+            logger.debug("Already connected to IBKR")
+            self.connected = True
+            if not self.watchdog.is_alive():
+                 self.watchdog.start()
+            return True
+        
+        try:
+            # Delegate to Singleton Manager
+            success = await self.manager.connect_async(
+                host=self.host, 
+                port=self.port, 
+                client_id=self.client_id
+            )
+            
+            self.connected = success
+            if success:
+                logger.info(f"✅ Bridge Connected via Manager ({'Paper' if self.is_paper_trading else 'Live'})")
+                if not self.watchdog.is_alive():
+                    self.watchdog.start()
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"❌ Error connecting to IBKR via Manager: {e}", exc_info=True)
+            self.connected = False
+            return False
+
     def connect(self, use_retry: bool = True) -> bool:
         """
         Connect to TWS/IB Gateway with optional retry logic.
-        
-        If use_retry=True, will retry connection every `reconnect_interval` seconds
-        until successful or max_reconnect_attempts is reached.
-        
-        If use_retry=False, attempts connection once and returns immediately.
-        
-        Args:
-            use_retry: Whether to retry connection on failure (default: True)
-        
-        Returns:
-            True if connected successfully, False otherwise
         """
         # Check if already connected via ib_insync's internal state
         if self.ib.isConnected():
@@ -193,7 +245,8 @@ class IBKRBridge:
             self.ib.connect(
                 host=self.host,
                 port=self.port,
-                clientId=self.client_id
+                clientId=self.client_id,
+                timeout=10
             )
             self.connected = True
             logger.info(f"✅ Connected to IBKR ({'Paper' if self.is_paper_trading else 'Live'} trading)")
@@ -269,7 +322,8 @@ class IBKRBridge:
                 self.ib.connect(
                     host=self.host,
                     port=self.port,
-                    clientId=self.client_id
+                    clientId=self.client_id,
+                    timeout=10
                 )
                 
                 # Success!
@@ -571,14 +625,14 @@ class IBKRBridge:
 _live_bridge: Optional['IBKRBridge'] = None
 _paper_bridge: Optional['IBKRBridge'] = None
 
-def get_ibkr_trader(host: str = "127.0.0.1", port: int = 7496, client_id: int = 1) -> 'IBKRBridge':
+def get_ibkr_trader(host: str = None, port: int = None, client_id: int = 1) -> 'IBKRBridge':
     """Get or create a live trading bridge instance."""
     global _live_bridge
     if _live_bridge is None:
         _live_bridge = IBKRBridge(host=host, port=port, client_id=client_id)
     return _live_bridge
 
-def get_paper_trading_trader(host: str = "127.0.0.1", port: int = 7497, client_id: int = 2) -> 'IBKRBridge':
+def get_paper_trading_trader(host: str = None, port: int = None, client_id: int = 2) -> 'IBKRBridge':
     """Get or create a paper trading bridge instance."""
     global _paper_bridge
     if _paper_bridge is None:

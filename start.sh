@@ -11,7 +11,7 @@ mkdir -p data/logs data/forecasts data/paper_trades
 PORT=${PORT:-8080}
 
 # Start the application
-exec uvicorn main:app --host 0.0.0.0 --port ${PORT}
+exec uvicorn main:app --host 0.0.0.0 --port ${PORT} --loop asyncio
 
 
 

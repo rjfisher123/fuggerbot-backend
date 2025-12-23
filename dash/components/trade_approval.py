@@ -231,14 +231,20 @@ def render_trade_approval():
                         "5. Click 'Connect to IBKR' below")
                 
                 if st.button("🔌 Connect to IBKR"):
-                    with st.spinner("Connecting to IBKR (this may take a few seconds)..."):
+                    with st.spinner("Connecting to IBKR..."):
                         import time
+                        import concurrent.futures
+                        
                         try:
-                            # Small delay to ensure UI updates
-                            time.sleep(0.1)
-                            
-                            # Try connection
-                            connection_result = trade_service.connect()
+                            # Run connection in a separate thread to avoid blocking Streamlit loop
+                            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                                future = executor.submit(trade_service.connect)
+                                try:
+                                    # Wait up to 15 seconds for result
+                                    connection_result = future.result(timeout=15)
+                                except concurrent.futures.TimeoutError:
+                                    st.error("❌ Connection timed out (15s)")
+                                    connection_result = False
                             
                             if connection_result:
                                 st.success("✅ Connected to IBKR!")

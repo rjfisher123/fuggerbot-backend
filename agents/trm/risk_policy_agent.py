@@ -14,6 +14,8 @@ from agents.trm.news_digest_agent import NewsDigest, NewsImpact, NewsSentiment
 from agents.trm.memory_summarizer import MemoryNarrative
 from reasoning.schemas import ReasoningDecision
 
+from agents.trm.symbol_sentiment_agent import SentimentOutput, SentimentZone
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,7 @@ class VetoReason(str, Enum):
     MEMORY_HIGH_HALLUCINATION = "MEMORY_HIGH_HALLUCINATION"
     MEMORY_LOW_WIN_RATE = "MEMORY_LOW_WIN_RATE"
     CRITIC_OVERWHELMING_FLAWS = "CRITIC_OVERWHELMING_FLAWS"
+    SENTIMENT_PANIC = "SENTIMENT_PANIC"
     NO_VETO = "NO_VETO"
 
 
@@ -35,6 +38,7 @@ class TRMInput(BaseModel):
     forecast_confidence: float = Field(..., ge=0.0, le=1.0, description="Forecast confidence")
     trust_score: float = Field(..., ge=0.0, le=1.0, description="Trust score")
     news_digest: NewsDigest = Field(..., description="Processed news summary")
+    symbol_sentiment: Optional[SentimentOutput] = Field(default=None, description="Detailed symbol sentiment")
     memory_narrative: MemoryNarrative = Field(..., description="Historical performance narrative")
     llm_decision: ReasoningDecision = Field(..., description="LLM's proposed decision")
     llm_confidence: float = Field(..., ge=0.0, le=1.0, description="LLM's confidence")
@@ -216,6 +220,51 @@ class RiskPolicyAgent:
             return (False, max(0.0, confidence + adjustment), VetoReason.NO_VETO, reason)
         
         return (False, confidence, VetoReason.NO_VETO, "No critique policy triggered")
+
+    def _apply_symbol_sentiment_policy(self, trm_input: TRMInput, confidence: float) -> tuple[bool, float, VetoReason, str]:
+        """
+        Apply symbol specific sentiment policy rules.
+        
+        Args:
+            trm_input: TRM input data
+            confidence: Current confidence level
+            
+        Returns:
+            Tuple of (veto_applied, adjusted_confidence, veto_reason, explanation)
+        """
+        sentiment = trm_input.symbol_sentiment
+        
+        if not sentiment:
+            return (False, confidence, VetoReason.NO_VETO, "No symbol sentiment data")
+            
+        # Rule 1: Veto on PANIC sentiment
+        if sentiment.zone == SentimentZone.PANIC:
+            return (
+                True,
+                0.0,
+                VetoReason.SENTIMENT_PANIC,
+                f"VETO: Market Panic detected for symbol (Score: {sentiment.score:.2f})"
+            )
+            
+        # Rule 2: Strong penalty for BEARISH sentiment
+        if sentiment.zone == SentimentZone.BEARISH:
+            adjustment = -0.2
+            reason = f"Bearish sentiment penalty (Score: {sentiment.score:.2f})"
+            return (False, max(0.0, confidence + adjustment), VetoReason.NO_VETO, reason)
+            
+        # Rule 3: Volatility dampener
+        if sentiment.volatility_flag:
+            adjustment = -0.1
+            reason = "High volatility sentiment dampener"
+            return (False, max(0.0, confidence + adjustment), VetoReason.NO_VETO, reason)
+            
+        # Rule 4: Boost for EUPHORIA (with caution) or BULLISH
+        if sentiment.zone == SentimentZone.BULLISH:
+            adjustment = +0.1
+            reason = f"Bullish sentiment boost (Score: {sentiment.score:.2f})"
+            return (False, min(1.0, confidence + adjustment), VetoReason.NO_VETO, reason)
+            
+        return (False, confidence, VetoReason.NO_VETO, "No significant sentiment signal")
     
     def decide(self, trm_input: TRMInput) -> FinalVerdict:
         """
@@ -260,6 +309,14 @@ class RiskPolicyAgent:
                 veto_applied = True
                 veto_reason = crit_veto_reason
             override_explanations.append(crit_explanation)
+
+        # 4. Symbol Sentiment Policy (only if not already vetoed)
+        if not veto_applied:
+            sent_veto, adjusted_confidence, sent_veto_reason, sent_explanation = self._apply_symbol_sentiment_policy(trm_input, adjusted_confidence)
+            if sent_veto:
+                veto_applied = True
+                veto_reason = sent_veto_reason
+            override_explanations.append(sent_explanation)
         
         # Determine final decision
         if veto_applied:
@@ -270,7 +327,16 @@ class RiskPolicyAgent:
             final_decision = trm_input.llm_decision
         
         # Compile override reason
-        override_reason = " | ".join([exp for exp in override_explanations if exp != "No news policy triggered" and exp != "No memory policy triggered" and exp != "No critique policy triggered"])
+        override_reason = " | ".join([
+            exp for exp in override_explanations 
+            if exp not in [
+                "No news policy triggered", 
+                "No memory policy triggered", 
+                "No critique policy triggered",
+                "No symbol sentiment data",
+                "No significant sentiment signal"
+            ]
+        ])
         if not override_reason:
             override_reason = "All policies passed"
         

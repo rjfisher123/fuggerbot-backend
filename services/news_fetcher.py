@@ -193,54 +193,127 @@ class NewsFetcher:
             return "\n".join(context_lines)
 
 
+    async def fetch_ibkr_news(self, symbol: str) -> List[Dict[str, str]]:
+        """
+        Fetch news from IBKR API.
+        """
+        from execution.connection_manager import get_connection_manager
+        from ib_insync import Stock, Contract
+        
+        manager = get_connection_manager()
+        if not manager.connected:
+            return []
+            
+        ib = manager.get_ib()
+        if not ib.isConnected():
+             return []
+             
+        headlines = []
+        try:
+            # Check for news providers if needed, though usually configured in TWS
+            # providers = await ib.reqNewsProvidersAsync()
+            # logger.debug(f"News providers: {providers}")
+            
+            # Create contract
+            contract = Stock(symbol, 'SMART', 'USD')
+            await ib.qualifyContractsAsync(contract)
+            
+            if not contract.conId:
+                logger.warning(f"Could not resolve contract for {symbol}")
+                return []
+
+            # Request historical news
+            # BRFG = Briefing.com, BUS = Business Wire, RTRS = Reuters
+            provider_codes = "BRFG+BUS+RTRS" 
+            
+            # Use safe async request
+            news_items = await ib.reqHistoricalNewsAsync(
+                contract.conId, 
+                provider_codes, 
+                "", 
+                "", 
+                10,
+                [] 
+            )
+            
+            for item in news_items:
+                headlines.append({
+                    "title": item.headline,
+                    "published": str(item.time),
+                    "link": "", 
+                    "source": "IBKR" # Explicit source
+                })
+                
+        except Exception as e:
+            logger.warning(f"Failed to fetch IBKR news for {symbol}: {e}")
+            
+        return headlines
+
+    async def get_context_async(self, symbol: str, max_specific: int = 5) -> str:
+        """
+        Get news context for a trading symbol (Async).
+        Merges RSS and IBKR news.
+        """
+        category = self._determine_category(symbol)
+        
+        # 1. RSS Feeds (Sync but fast enough, or could be threaded)
+        # We'll run in executor to be safe if strictly async
+        import asyncio
+        loop = asyncio.get_running_loop()
+        
+        def fetch_rss():
+             all_headlines = []
+             for feed_url in self.feeds.get(category, []):
+                all_headlines.extend(self._fetch_feed(feed_url))
+             return self._filter_headlines(all_headlines, symbol)
+             
+        rss_headlines = await loop.run_in_executor(None, fetch_rss)
+        
+        # 2. IBKR News
+        ib_headlines = await self.fetch_ibkr_news(symbol)
+        
+        # Merge
+        # Prioritize IBKR as it is more specific
+        merged = ib_headlines + rss_headlines
+        
+        if not merged:
+            # Fallback
+            def fetch_macro():
+                macro = []
+                for feed_url in self.feeds.get("MACRO", []):
+                    macro.extend(self._fetch_feed(feed_url))
+                return macro[:5]
+            
+            macro_headlines = await loop.run_in_executor(None, fetch_macro)
+            if not macro_headlines:
+                return "No recent news available."
+                
+            return "\n".join([f"{i}. {h['title']}" for i, h in enumerate(macro_headlines, 1)])
+
+        # Select top N
+        selected = merged[:max_specific]
+        
+        context_lines = [f"NEWS FOR {symbol} (Source: IBKR/RSS):"]
+        for i, h in enumerate(selected, 1):
+             source = h.get("source", "RSS")
+             context_lines.append(f"{i}. [{source}] {h['title']}")
+             
+        return "\n".join(context_lines)
+
 # Singleton instance
 _news_fetcher: Optional[NewsFetcher] = None
 
-
 def get_news_fetcher() -> NewsFetcher:
-    """
-    Get or create singleton NewsFetcher instance.
-    
-    Returns:
-        NewsFetcher instance
-    """
+    """Get singleton."""
     global _news_fetcher
-    
     if _news_fetcher is None:
         _news_fetcher = NewsFetcher()
-    
     return _news_fetcher
 
-
-# Convenience function
-def get_news_context(symbol: str) -> str:
-    """
-    Convenience function to get news context for a symbol.
-    
-    Args:
-        symbol: Trading symbol
-    
-    Returns:
-        Formatted news context string
-    """
+# Async Convenience
+async def get_news_context_async(symbol: str) -> str:
     fetcher = get_news_fetcher()
-    return fetcher.get_context(symbol)
-
-
-if __name__ == "__main__":
-    # Test the news fetcher
-    logging.basicConfig(level=logging.INFO)
-    
-    test_symbols = ["BTC-USD", "ETH-USD", "NVDA", "AAPL", "JPM"]
-    
-    for symbol in test_symbols:
-        print("=" * 60)
-        print(f"Testing: {symbol}")
-        print("=" * 60)
-        
-        context = get_news_context(symbol)
-        print(context)
-        print()
+    return await fetcher.get_context_async(symbol)
 
 
 

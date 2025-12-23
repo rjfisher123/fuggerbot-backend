@@ -22,6 +22,7 @@ from context.tracker import RegimeTracker
 
 # Level 2 Perception Agents
 from agents.trm.news_digest_agent import NewsDigestAgent, NewsDigest
+from agents.trm.symbol_sentiment_agent import SymbolSentimentAgent
 from agents.trm.memory_summarizer import MemorySummarizer, MemoryNarrative
 from services.news_fetcher import NewsFetcher
 
@@ -95,6 +96,7 @@ class TradeOrchestrator:
         # Initialize Level 2 Perception Agents
         self.news_fetcher = NewsFetcher()
         self.news_digest = NewsDigestAgent()
+        self.symbol_sentiment_agent = SymbolSentimentAgent()
         self.memory_summarizer = MemorySummarizer()
         
         # Initialize Level 4 Policy Agent
@@ -344,6 +346,17 @@ class TradeOrchestrator:
                 summary="News fetch error - proceeding with neutral assumption",
                 headline_count=0
             )
+            
+        # 1b. Symbol Specific Sentiment (New in v2.0)
+        try:
+            # We reuse the raw news string, but ideally we'd pass a list of headlines
+            # Extract headlines from raw news for the agent
+            headlines = [line.strip() for line in raw_news.split('\n') if line.strip() and not line.startswith("RECENT")]
+            symbol_sentiment = self.symbol_sentiment_agent.analyze(symbol, headlines)
+            logger.info(f"✅ [PERCEPTION] Symbol Sentiment: {symbol_sentiment.score:.2f} ({symbol_sentiment.zone.value})")
+        except Exception as e:
+            logger.error(f"❌ [PERCEPTION] Symbol sentiment failed: {e}")
+            symbol_sentiment = None
         
         # 2. Memory Perception (Enhanced with Global Data Lake)
         try:
@@ -473,6 +486,7 @@ class TradeOrchestrator:
                 forecast_confidence=forecast_confidence,
                 trust_score=trust_result.metrics.overall_trust_score,
                 news_digest=news_digest,
+                symbol_sentiment=symbol_sentiment,
                 memory_narrative=memory_narrative,
                 llm_decision=llm_decision.decision,
                 llm_confidence=llm_decision.confidence,
@@ -575,11 +589,14 @@ class TradeOrchestrator:
             logger.info(f"🟢 [EXECUTION] APPROVED! Sending BUY for {quantity} {symbol}...")
             
             if self.broker and self.broker.is_connected():
-                order = self.broker.execute_trade("BUY", symbol, quantity)
-                if order:
-                    logger.info(f"🚀 Order Placed: Order ID {order.orderId}")
+                if self.settings.live_trading_enabled:
+                    order = self.broker.execute_trade("BUY", symbol, quantity)
+                    if order:
+                        logger.info(f"🚀 Order Placed: Order ID {order.orderId}")
+                    else:
+                        logger.error("❌ Order Placement Failed")
                 else:
-                    logger.error("❌ Order Placement Failed")
+                    logger.warning(f"🛑 Live Trading DISABLED. Skipping execution for {quantity} {symbol}.")
             else:
                 logger.warning("⚠️ Broker not connected. Trade skipped.")
             

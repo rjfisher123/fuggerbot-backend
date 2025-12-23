@@ -32,10 +32,17 @@ class IBKRClient:
     def trader(self) -> IBKRTrader:
         """Get or create IBKR trader instance."""
         if self._trader is None:
+            # Load config from env
+            host = os.getenv("IBKR_HOST", "127.0.0.1")
+            
             if self.paper_trading:
-                self._trader = get_paper_trading_trader()
+                # Default to 7497 if not specified, but prefer env var if set
+                port = int(os.getenv("IBKR_PORT", "7497"))
+                self._trader = get_paper_trading_trader(host=host, port=port, client_id=101)
             else:
-                self._trader = get_live_trading_trader()
+                # Default to 7496 for live
+                port = int(os.getenv("IBKR_PORT", "7496"))
+                self._trader = get_live_trading_trader(host=host, port=port, client_id=100)
         return self._trader
     
     def get_connection_status(self) -> Dict:
@@ -73,9 +80,9 @@ class IBKRClient:
                 "error": str(e)
             }
     
-    def connect(self) -> bool:
+    async def connect_async(self) -> bool:
         """
-        Connect to IBKR.
+        Async Connect to IBKR.
         
         Returns:
             True if connected successfully, False otherwise
@@ -96,7 +103,57 @@ class IBKRClient:
                 pass
             
             # Attempt connection
-            success = trader.connect()
+            success = await trader.connect_async(use_retry=False)
+            if success:
+                log_ibkr_event(
+                    event_type="connected",
+                    message=f"Successfully connected to IBKR",
+                    connected=True,
+                    host=trader.host,
+                    port=trader.port
+                )
+            else:
+                log_ibkr_event(
+                    event_type="connection_failed",
+                    message=f"Failed to connect to IBKR",
+                    connected=False,
+                    host=trader.host,
+                    port=trader.port
+                )
+            return success
+        except Exception as e:
+            logger.error(f"Error connecting to IBKR: {e}", exc_info=True)
+            log_ibkr_event(
+                event_type="error",
+                message=f"Connection error: {str(e)}",
+                connected=False
+            )
+            return False
+
+    def connect(self) -> bool:
+        """
+        Connect to IBKR (Synchronous).
+        
+        Returns:
+            True if connected successfully, False otherwise
+        """
+        try:
+            trader = self.trader
+            
+            # Check if already connected
+            if trader.connected:
+                return True
+            
+            # Try to check if actually connected
+            try:
+                if hasattr(trader.ib, 'isConnected') and trader.ib.isConnected():
+                    trader.connected = True
+                    return True
+            except Exception:
+                pass
+            
+            # Attempt connection
+            success = trader.connect(use_retry=False)
             if success:
                 log_ibkr_event(
                     event_type="connected",

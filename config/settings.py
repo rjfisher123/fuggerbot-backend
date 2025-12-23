@@ -43,6 +43,13 @@ class Settings(BaseSettings):
         description="Environment state: 'dev' or 'prod'",
         validation_alias="ENV_STATE"
     )
+
+    # Live Trading Safety Switch
+    live_trading_enabled: bool = Field(
+        default=False,
+        description="Master switch for live trading execution",
+        validation_alias="LIVE_TRADING_ENABLED"
+    )
     
     @field_validator("openrouter_api_key")
     @classmethod

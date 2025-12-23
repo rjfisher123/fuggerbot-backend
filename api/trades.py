@@ -1,13 +1,11 @@
 """
 Trades dashboard API.
 
-Renders a FastAPI page for managing trade approvals and history.
+Provides JSON endpoints for managing trade approvals and history.
 """
-from fastapi import APIRouter, Request, Form, HTTPException, status, Depends
-from fastapi.responses import HTMLResponse, JSONResponse
-from jinja2 import Environment, FileSystemLoader
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from pathlib import Path
 import sys
@@ -19,186 +17,37 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from services.trade_service import get_trade_service
-from workers.ibkr_heartbeat import get_latest_status
 from persistence.db import SessionLocal
 from persistence.repositories_trades import TradeRequestRepository
 from core.logger import logger
 from core.auth import require_auth
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
-dashboard_router = APIRouter(tags=["dashboard"])
 
-templates_dir = project_root / "ui" / "templates"
-jinja_env = Environment(loader=FileSystemLoader(str(templates_dir)))
+# --- Request/Response Models ---
 
+class TradeRequestModel(BaseModel):
+    trade_id: str
+    symbol: str
+    action: str
+    quantity: int
+    order_type: str
+    limit_price: Optional[float] = None
+    approval_code: Optional[str] = None
+    status: str
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    forecast_id: Optional[str] = None
+    paper_trading: bool = False
 
-def render_template(template_name: str, context: dict) -> str:
-    template = jinja_env.get_template(template_name)
-    return template.render(**context)
+class TradeActionRequest(BaseModel):
+    trade_id: str
+    approval_code: Optional[str] = None
 
+class ActionResponse(BaseModel):
+    success: bool
+    message: str
 
-def build_context(success_message: str | None = None, error_message: str | None = None) -> dict:
-    """Collect data for the trades dashboard."""
-    trade_service = get_trade_service(paper_trading=False)
-    pending_trades = trade_service.list_pending_trades()
-    trade_history = trade_service.get_trade_history(limit=20)
-    
-    # Get connection status from database (updated by heartbeat worker)
-    db_status = get_latest_status(paper_trading=False)
-    if db_status:
-        connection_status = {
-            "connected": db_status.connected,
-            "host": db_status.host,
-            "port": db_status.port,
-            "paper_trading": db_status.paper_trading,
-            "client_id": db_status.client_id,
-            "last_checked": db_status.last_checked.isoformat() if db_status.last_checked else None,
-            "last_connected": db_status.last_connected.isoformat() if db_status.last_connected else None,
-            "reconnect_attempts": db_status.reconnect_attempts,
-            "error": db_status.error_message
-        }
-    else:
-        # Fallback to direct check if no DB record exists
-        connection_status = trade_service.get_connection_status()
-    
-    # Extract unique symbols from pending trades for price charts
-    symbols = list(set([trade.get("symbol") for trade in pending_trades if trade.get("symbol")]))
-    
-    # Get symbols from trade history too
-    for trade in trade_history:
-        if trade.get("symbol") and trade.get("symbol") not in symbols:
-            symbols.append(trade.get("symbol"))
-
-    return {
-        "pending_trades": pending_trades,
-        "trade_history": trade_history,
-        "connection_status": connection_status,
-        "success_message": success_message,
-        "error_message": error_message,
-        "symbols": symbols[:10],  # Limit to 10 symbols for performance
-    }
-
-
-def _sanitize_row_id(identifier: str) -> str:
-    cleaned = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in str(identifier))
-    return f"trade-row-{cleaned}"
-
-
-def _find_pending_trade(trade_id: str):
-    trade_service = get_trade_service(paper_trading=False)
-    pending = trade_service.list_pending_trades()
-    for trade in pending:
-        if str(trade.get("trade_id")) == str(trade_id) or str(trade.get("approval_code")) == str(trade_id):
-            return trade
-    return None
-
-
-def _render_trade_row_html(trade_id: str, trade: dict | None = None, message: str | None = None) -> str:
-    template = jinja_env.get_template("partials/trade_row.html")
-    row_id = _sanitize_row_id(trade_id)
-    return template.render(trade=trade, row_id=row_id, message=message)
-
-
-@dashboard_router.get("/trades", response_class=HTMLResponse)
-async def trades_dashboard(request: Request):
-    """Render the trades dashboard."""
-    context = build_context()
-    html_content = render_template("trades.html", context)
-    return HTMLResponse(content=html_content)
-
-
-@dashboard_router.get("/trades/row/{trade_id}", response_class=HTMLResponse)
-async def trade_row(trade_id: str):
-    """Return a single trade row fragment."""
-    trade = _find_pending_trade(trade_id)
-    message = None if trade else "Trade processed."
-    content = _render_trade_row_html(trade_id, trade=trade, message=message)
-    return HTMLResponse(content=content)
-
-
-@dashboard_router.get("/trades/status", response_class=HTMLResponse)
-async def ibkr_status():
-    """Return IBKR connection status fragment."""
-    context = build_context()
-    template = jinja_env.get_template("partials/ibkr_status.html")
-    return HTMLResponse(content=template.render(**context))
-
-
-@dashboard_router.post("/trades/approve", response_class=HTMLResponse)
-async def approve_trade(
-    request: Request,
-    trade_id: str = Form(""),
-    approval_code: str = Form(""),
-    current_user: dict = Depends(require_auth)
-):
-    """Approve a trade or check SMS approvals."""
-    trade_service = get_trade_service(paper_trading=False)
-    code = approval_code.strip() or trade_id.strip()
-    result = trade_service.approve_trade(trade_id=code or "", approval_code=approval_code.strip() or None)
-
-    if result.get("success"):
-        success_message = f"✅ Trade approved: {result.get('message', 'Executed successfully')}"
-        error_message = None
-    else:
-        success_message = None
-        error_message = f"❌ {result.get('message', 'Failed to approve trade')}"
-
-    if request.headers.get("HX-Request") == "true":
-        trade = _find_pending_trade(code or trade_id)
-        message = None
-        if not result.get("success"):
-            message = error_message
-        elif not trade:
-            message = success_message
-        content = _render_trade_row_html(code or trade_id, trade=trade, message=message)
-        return HTMLResponse(content=content)
-
-    context = build_context(success_message, error_message)
-    html_content = render_template("trades.html", context)
-    return HTMLResponse(content=html_content)
-
-
-@dashboard_router.post("/trades/reject", response_class=HTMLResponse)
-async def reject_trade(request: Request, trade_id: str = Form(...)):
-    """Reject a pending trade."""
-    trade_service = get_trade_service(paper_trading=False)
-    result = trade_service.reject_trade(trade_id.strip())
-
-    if result.get("success"):
-        success_message = result.get("message", "Trade rejected.")
-        error_message = None
-    else:
-        success_message = None
-        error_message = result.get("message", "Failed to reject trade.")
-
-    if request.headers.get("HX-Request") == "true":
-        trade = _find_pending_trade(trade_id)
-        message = error_message or success_message
-        content = _render_trade_row_html(trade_id, trade=trade, message=message)
-        return HTMLResponse(content=content)
-
-    context = build_context(success_message, error_message)
-    html_content = render_template("trades.html", context)
-    return HTMLResponse(content=html_content)
-
-
-@dashboard_router.post("/trades/connect", response_class=HTMLResponse)
-async def connect_ibkr(request: Request):
-    """Attempt to connect to IBKR."""
-    trade_service = get_trade_service(paper_trading=False)
-    if trade_service.connect():
-        success_message = "✅ Connected to IBKR."
-        error_message = None
-    else:
-        success_message = None
-        error_message = "❌ Failed to connect to IBKR. Ensure TWS/IB Gateway is running."
-
-    context = build_context(success_message, error_message)
-    html_content = render_template("trades.html", context)
-    return HTMLResponse(content=html_content)
-
-
-# API Request/Response models
 class PlaceTradeRequest(BaseModel):
     """Request model for placing a trade."""
     
@@ -211,7 +60,6 @@ class PlaceTradeRequest(BaseModel):
     forecast_id: Optional[str] = Field(None, description="Optional forecast ID for tracking")
     paper_trading: bool = Field(default=False, description="Whether this is paper trading")
 
-
 class PlaceTradeResponse(BaseModel):
     """Response model for placed trade."""
     
@@ -220,6 +68,105 @@ class PlaceTradeResponse(BaseModel):
     approval_code: Optional[str] = Field(None, description="Approval code for this request")
     expires_at: Optional[str] = Field(None, description="When the request expires (ISO format)")
 
+# --- Endpoints ---
+
+@router.get("/pending", response_model=List[TradeRequestModel])
+async def get_pending_trades():
+    """Get list of pending trade requests."""
+    try:
+        trade_service = get_trade_service(paper_trading=False)
+        pending = trade_service.list_pending_trades()
+        
+        # Convert dicts/models to Pydantic
+        results = []
+        for t in pending:
+            results.append(TradeRequestModel(
+                trade_id=str(t.get("trade_id")),
+                symbol=t.get("symbol"),
+                action=t.get("action"),
+                quantity=int(t.get("quantity")),
+                order_type=t.get("order_type"),
+                limit_price=t.get("price"),
+                approval_code=t.get("approval_code"),
+                status=t.get("status"),
+                created_at=str(t.get("created_at")) if t.get("created_at") else None,
+                expires_at=str(t.get("expires_at")) if t.get("expires_at") else None,
+                forecast_id=t.get("forecast_id"),
+                paper_trading=bool(t.get("paper_trading", False))
+            ))
+        return results
+    except Exception as e:
+        logger.error(f"Error fetching pending trades: {e}", exc_info=True)
+        return []
+
+@router.get("/history", response_model=List[TradeRequestModel])
+async def get_trade_history():
+    """Get history of processed trades."""
+    try:
+        trade_service = get_trade_service(paper_trading=False)
+        history = trade_service.get_trade_history(limit=50)
+        
+        results = []
+        for t in history:
+            results.append(TradeRequestModel(
+                trade_id=str(t.get("trade_id")),
+                symbol=t.get("symbol"),
+                action=t.get("action"),
+                quantity=int(t.get("quantity")),
+                order_type=t.get("order_type"),
+                limit_price=t.get("price"),
+                approval_code=t.get("approval_code"),
+                status=t.get("status"),
+                created_at=str(t.get("created_at")) if t.get("created_at") else None,
+                expires_at=str(t.get("expires_at")) if t.get("expires_at") else None,
+                forecast_id=t.get("forecast_id"),
+                paper_trading=bool(t.get("paper_trading", False))
+            ))
+        return results
+    except Exception as e:
+        logger.error(f"Error fetching trade history: {e}", exc_info=True)
+        return []
+
+@router.post("/approve", response_model=ActionResponse)
+async def approve_trade(
+    request: TradeActionRequest,
+    current_user: dict = Depends(require_auth)
+):
+    """Approve a pending trade."""
+    try:
+        trade_service = get_trade_service(paper_trading=False)
+        code = request.approval_code.strip() if request.approval_code else request.trade_id.strip()
+        
+        result = trade_service.approve_trade(
+            trade_id=code,
+            approval_code=request.approval_code.strip() if request.approval_code else None
+        )
+
+        return ActionResponse(
+            success=result.get("success", False),
+            message=result.get("message", "Unknown result")
+        )
+    except Exception as e:
+        logger.error(f"Error approving trade: {e}", exc_info=True)
+        return ActionResponse(success=False, message=f"Error: {str(e)}")
+
+@router.post("/reject", response_model=ActionResponse)
+async def reject_trade(
+    request: TradeActionRequest,
+    current_user: dict = Depends(require_auth)
+):
+    """Reject a pending trade."""
+    try:
+        trade_service = get_trade_service(paper_trading=False)
+        result = trade_service.reject_trade(request.trade_id.strip())
+
+        return ActionResponse(
+            success=result.get("success", False),
+            message=result.get("message", "Unknown result")
+        )
+    except Exception as e:
+        logger.error(f"Error rejecting trade: {e}", exc_info=True)
+        return ActionResponse(success=False, message=f"Error: {str(e)}")
 
 @router.post("/place", response_model=PlaceTradeResponse, status_code=status.HTTP_201_CREATED)
 async def place_trade(
@@ -228,15 +175,6 @@ async def place_trade(
 ) -> PlaceTradeResponse:
     """
     Place a new trade request.
-    
-    Args:
-        request: Trade placement request with symbol, action, quantity, etc.
-    
-    Returns:
-        PlaceTradeResponse with request_id and status
-    
-    Raises:
-        HTTPException: If validation fails or trade request creation fails
     """
     try:
         # Validate action

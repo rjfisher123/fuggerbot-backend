@@ -22,8 +22,7 @@ class MetaCriticAgent:
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
 
-# Alias for backward compatibility
-DeepSeekEngine = MetaCriticAgent
+
 
     def _get_system_prompt(self, red_team_mode: bool) -> str:
         base_persona = (
@@ -409,6 +408,9 @@ DeepSeekEngine = MetaCriticAgent
             error_response.critique_flaws_count = 0  # No critique performed due to error
             return error_response
 
+
+# Alias for backward compatibility
+DeepSeekEngine = MetaCriticAgent
 
 # Backward compatibility: Singleton pattern and settings integration
 _deepseek_engine: Optional[DeepSeekEngine] = None

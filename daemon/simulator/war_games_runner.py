@@ -470,7 +470,11 @@ class WarGamesRunner:
         
         return result
     
-    def run_all_scenarios(self, output_path: Path = Path("data/war_games_results.json")) -> Dict[str, Any]:
+    def run_all_scenarios(
+        self, 
+        output_path: Path = Path("data/war_games_results.json"),
+        progress_callback=None
+    ) -> Dict[str, Any]:
         logger.info("🎯 Starting War Games - Full Campaign Suite")
         
         scenarios = [
@@ -521,10 +525,19 @@ class WarGamesRunner:
         symbols = ["BTC-USD", "ETH-USD", "NVDA", "MSFT"]
         all_results = []
         
+        total_steps = len(scenarios) * len(symbols) * len(param_sets)
+        current_step = 0
+        
         for scenario in scenarios:
             for symbol in symbols:
                 for param_name, params in param_sets.items():
+                    current_step += 1
                     campaign_name = f"{scenario['name']} - {symbol} - {param_name}"
+                    
+                    if progress_callback:
+                        pct = int((current_step / total_steps) * 100)
+                        progress_callback(pct, f"Simulating {symbol} ({scenario['name']})...")
+                        
                     try:
                         result = self.run_campaign(
                             campaign_name=campaign_name,

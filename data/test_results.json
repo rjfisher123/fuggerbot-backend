@@ -1,0 +1,60 @@
+{
+  "run_timestamp": "2025-12-22T21:15:00.000684",
+  "total_campaigns": 0,
+  "scenarios": [
+    {
+      "name": "Bull Run (2021)",
+      "start_date": "2021-01-01",
+      "end_date": "2021-12-31",
+      "description": "Strong upward trend, low volatility"
+    },
+    {
+      "name": "Inflation Shock (2022)",
+      "start_date": "2022-01-01",
+      "end_date": "2022-12-31",
+      "description": "High volatility, regime shifts"
+    },
+    {
+      "name": "Recovery Rally (2023)",
+      "start_date": "2023-01-01",
+      "end_date": "2023-12-31",
+      "description": "Tech bounce back, choppy markets"
+    }
+  ],
+  "param_sets": {
+    "Aggressive": {
+      "trust_threshold": 0.55,
+      "min_confidence": 0.7,
+      "max_position_size": 0.15,
+      "stop_loss": 0.08,
+      "take_profit": 0.2,
+      "cooldown_days": 2
+    },
+    "Balanced": {
+      "trust_threshold": 0.65,
+      "min_confidence": 0.75,
+      "max_position_size": 0.1,
+      "stop_loss": 0.05,
+      "take_profit": 0.15,
+      "cooldown_days": 2
+    },
+    "Conservative": {
+      "trust_threshold": 0.75,
+      "min_confidence": 0.8,
+      "max_position_size": 0.05,
+      "stop_loss": 0.03,
+      "take_profit": 0.1,
+      "cooldown_days": 2
+    }
+  },
+  "results": [],
+  "validation": {
+    "hash": "f0652f6d38393b86",
+    "total_trades_executed": 0,
+    "total_bars_processed": 0,
+    "campaigns_completed": 0,
+    "campaigns_expected": 36,
+    "completion_rate": 0.0,
+    "verified": false
+  }
+}

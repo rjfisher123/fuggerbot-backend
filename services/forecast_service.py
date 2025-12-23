@@ -39,7 +39,7 @@ class ForecastService:
         self.coherence_engine = CrossAssetCoherence()
         logger.info("ForecastService initialized")
     
-    def create_forecast(
+    async def create_forecast(
         self,
         symbol: str,
         historical_prices: List[float],
@@ -88,6 +88,14 @@ class ForecastService:
         forecast_id = self.metadata_manager.generate_forecast_id(symbol, parameters)
         
         logger.info(f"Creating forecast {forecast_id} for {symbol}")
+
+        # Fetch News Context (Async)
+        from services.news_fetcher import get_news_context_async
+        try:
+            news_context = await get_news_context_async(symbol)
+        except Exception as e:
+            logger.warning(f"Failed to fetch news context: {e}")
+            news_context = "News unavailable."
         
         # Create forecast trader
         forecast_trader = ForecastTrader(model_name=model_name)
@@ -105,12 +113,20 @@ class ForecastService:
             forecast_trader.forecast_engine = engine
         
         # Generate forecast and evaluate trust
-        result = forecast_trader.analyze_symbol(
-            symbol=symbol,
-            historical_prices=historical_prices,
-            forecast_horizon=forecast_horizon,
-            context_length=context_length
-        )
+        # Note: analyze_symbol is synchronous CPU bound.
+        # Should we wrap in loop.run_in_executor? Yes preferably.
+        import asyncio
+        loop = asyncio.get_running_loop()
+        
+        def _run_analysis():
+            return forecast_trader.analyze_symbol(
+                symbol=symbol,
+                historical_prices=historical_prices,
+                forecast_horizon=forecast_horizon,
+                context_length=context_length
+            )
+            
+        result = await loop.run_in_executor(None, _run_analysis)
         
         if not result.get("success"):
             error_msg = result.get("error", "Unknown error")
@@ -136,6 +152,7 @@ class ForecastService:
             historical_series=historical_prices
         )
         
+        # Check cross-asset coherence (requires async call potentially? No, currently sync in structure)
         # Check cross-asset coherence
         coherence = self.coherence_engine.check_coherence(
             symbol=symbol,
@@ -143,6 +160,34 @@ class ForecastService:
             symbol_action=recommendation.get("action", "HOLD"),
             symbol_expected_return=recommendation.get("expected_return_pct", 0)
         )
+
+        # Calculate Technicals for Rich Context
+        import pandas as pd
+        import numpy as np
+        from models.technical_analysis import calculate_rsi, calculate_macd
+        
+        technicals = {}
+        try:
+            # Convert to Series
+            price_series = pd.Series(historical_prices)
+            
+            # RSI
+            rsi_series = calculate_rsi(price_series)
+            current_rsi = rsi_series.iloc[-1] if not rsi_series.empty else None
+            
+            # MACD
+            macd_df = calculate_macd(price_series)
+            macd_hist = macd_df['macd_hist'].iloc[-1] if not macd_df.empty else None
+            macd_line = macd_df['macd_line'].iloc[-1] if not macd_df.empty else None
+            
+            technicals = {
+                "rsi": float(current_rsi) if current_rsi is not None and not np.isnan(current_rsi) else None,
+                "macd_hist": float(macd_hist) if macd_hist is not None and not np.isnan(macd_hist) else None,
+                "macd_line": float(macd_line) if macd_line is not None and not np.isnan(macd_line) else None
+            }
+        except Exception as e:
+            logger.warning(f"Failed to calculate technicals for {symbol}: {e}")
+            technicals = {"error": str(e)}
         
         # Save snapshot
         snapshot_path = self.metadata_manager.save_forecast_snapshot(
@@ -175,7 +220,9 @@ class ForecastService:
                 "frs_is_reliable": frs.get('is_reliable'),
                 "frs_components": frs.get('components', {}),
                 "frs_interpretation": frs.get('interpretation', ""),
-                "frs_recommendation": frs.get('recommendation', "")
+                "frs_recommendation": frs.get('recommendation', ""),
+                "news_context": news_context, # Injected News
+                "technicals": technicals # Injected Technicals
             }
         )
         
@@ -267,7 +314,7 @@ def get_forecast_service() -> ForecastService:
 
 
 # Convenience functions for direct use
-def create_forecast(
+async def create_forecast(
     symbol: str,
     historical_prices: List[float],
     forecast_horizon: int = 30,
@@ -286,7 +333,7 @@ def create_forecast(
         Forecast domain object
     """
     service = get_forecast_service()
-    return service.create_forecast(symbol, historical_prices, forecast_horizon, options)
+    return await service.create_forecast(symbol, historical_prices, forecast_horizon, options)
 
 
 def get_forecast(forecast_id: str) -> Optional[Forecast]:

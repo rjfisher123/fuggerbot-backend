@@ -169,6 +169,79 @@ st.plotly_chart(fig_symbol, use_container_width=True)
 
 st.markdown("---")
 
+# === SECTION 4b: Counterfactual Analysis (New in v2.0) ===
+st.header("🔮 Counterfactual Simulator")
+st.markdown("What if we were less risk averse?")
+
+# Simulator controls
+sim_confidence_threshold = st.slider(
+    "Simulation: Min Confidence Threshold",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.6,
+    step=0.05,
+    help="Set a hypothetical confidence threshold to see how many rejected trades would have been approved."
+)
+
+# Filter trades that were REJECTED but would have passed this new threshold
+# We need to extract confidence first
+try:
+    if 'confidence' not in df_fomo.columns:
+        # Try to extract from llm_response if top-level metric missing
+        df_fomo['confidence'] = df_fomo['llm_response'].apply(
+            lambda x: x.get('confidence', 0.0) if isinstance(x, dict) else 0.0
+        )
+except Exception:
+    df_fomo['confidence'] = 0.0
+
+# "Would have hit" candidates
+# They are FOMO cases (Profitable but Rejected) AND their confidence >= new threshold
+would_have_hit = df_fomo[df_fomo['confidence'] >= sim_confidence_threshold].copy()
+
+col1, col2 = st.columns(2)
+with col1:
+    st.metric(
+        "Recoverable Trades", 
+        len(would_have_hit),
+        delta=len(would_have_hit) if len(would_have_hit) > 0 else None,
+        help="Trades that would have been approved with this lower threshold"
+    )
+
+with col2:
+    # Hypothetical PnL Recovery
+    # Assume distinct trade size based on symbol type (rough estimate)
+    # Crypto = $1000, Stock = $5000 (Just for estimation)
+    est_recovery_val = 0.0
+    
+    # Check if we have percent return data
+    if 'post_mortem' in would_have_hit.columns:
+        # Try to extract actual return pct from post mortem
+        # This relies on the post-mortem analyzer having populated 'actual_return_pct' or similar
+        # For now, we'll assume a standard 5% win for "Profit" outcomes if precise data missing
+        
+        # Simple heuristic for V2.0 demo
+        recovery_count = len(would_have_hit)
+        avg_trade_size = 1000.0
+        avg_win_pct = 0.05 # Conservative 5%
+        est_recovery_val = recovery_count * avg_trade_size * avg_win_pct
+        
+    st.metric(
+        "Potential Recaptured Profit", 
+        f"${est_recovery_val:,.2f}*",
+        help=f"*Estimated based on ${avg_trade_size} trade size and {avg_win_pct:.1%} avg win"
+    )
+
+if not would_have_hit.empty:
+    st.subheader("Recoverable Trade List")
+    st.dataframe(
+        would_have_hit[['timestamp', 'symbol', 'confidence', 'root_cause']],
+        use_container_width=True
+    )
+else:
+    st.info("Even with this lower threshold, no additional profitable trades would have been triggered.")
+
+st.markdown("---")
+
 # === SECTION 5: Recommendations ===
 st.header("💡 Recommendations to Reduce FOMO")
 
