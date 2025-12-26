@@ -425,4 +425,5 @@ Human judgment remains the sole authority.
 - [Agents.md](../Agents.md) - Core system specification
 - [Strategic Reasoner README](../agents/strategic/README.md) - Implementation details
 - [A2A Integration Test Guide](./A2A_INTEGRATION_TEST.md) - Integration testing
+- [Testing & Evaluation Initiation Prompts](./TESTING_EVALUATION_INITIATION.md) - Testing entry conditions and protocols
 
