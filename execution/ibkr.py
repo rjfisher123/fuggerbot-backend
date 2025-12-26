@@ -182,10 +182,11 @@ class IBKRBridge:
         self.is_paper_trading = (port == 7497)
         self.main_loop = None # Capture main loop involved in async connection
         
-        # Start Watchdog
-        self.watchdog = ConnectionWatchdog(self)
-        # Note: watchdog starts when connect() is first called or explicitly started?
-        # Better to start it in connect() to avoid checking before initial connection
+        # DISABLE Watchdog: Connection Manager handles reconnects, watchdog conflicts with shared connections
+        self.watchdog = None  # ConnectionWatchdog(self)
+        # Note: Watchdog disabled because Singleton ConnectionManager is used
+        # Multiple clients (Dashboard + Backend) share one IB() instance
+        # Watchdog was killing connections when it detected "loss" during clientId switches
         
         # Initialize Risk Control Service
         self.risk_control = RiskControlService()
@@ -203,8 +204,7 @@ class IBKRBridge:
         if self.ib.isConnected():
             logger.debug("Already connected to IBKR")
             self.connected = True
-            if not self.watchdog.is_alive():
-                 self.watchdog.start()
+            # Watchdog disabled (using Singleton ConnectionManager)
             return True
         
         try:
@@ -218,8 +218,7 @@ class IBKRBridge:
             self.connected = success
             if success:
                 logger.info(f"✅ Bridge Connected via Manager ({'Paper' if self.is_paper_trading else 'Live'})")
-                if not self.watchdog.is_alive():
-                    self.watchdog.start()
+                # Watchdog disabled (using Singleton ConnectionManager)
             
             return success
             
@@ -236,8 +235,7 @@ class IBKRBridge:
         if self.ib.isConnected():
             logger.debug("Already connected to IBKR")
             self.connected = True
-            if not self.watchdog.is_alive():
-                 self.watchdog.start()
+            # Watchdog disabled (using Singleton ConnectionManager)
             return True
         
         try:
@@ -251,9 +249,7 @@ class IBKRBridge:
             self.connected = True
             logger.info(f"✅ Connected to IBKR ({'Paper' if self.is_paper_trading else 'Live'} trading)")
             
-            # Start Watchdog if not running
-            if not self.watchdog.is_alive():
-                self.watchdog.start()
+            # Watchdog disabled (using Singleton ConnectionManager)
                 
             return True
             
@@ -330,15 +326,7 @@ class IBKRBridge:
                 self.connected = True
                 logger.info("✅ Reconnected to TWS")
                 
-                # Ensure watchdog is running
-                if not self.watchdog.is_alive():
-                     try:
-                        self.watchdog.start()
-                     except RuntimeError:
-                        # Thread might be already started but not alive if it finished?
-                        # Re-create watchdog if it finished
-                        self.watchdog = ConnectionWatchdog(self)
-                        self.watchdog.start()
+                # Watchdog disabled (using Singleton ConnectionManager)
 
                 return True
                 
@@ -397,6 +385,14 @@ class IBKRBridge:
                 logger.debug(f"Created Stock contract: {symbol} on SMART")
             
             # Qualify the contract
+            # Enable nested event loops if needed (for async contexts)
+            import asyncio
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except:
+                pass  # nest_asyncio not available or already applied
+                
             qualified = self.ib.qualifyContracts(contract)
             
             if not qualified:

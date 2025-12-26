@@ -15,14 +15,8 @@ sys.path.insert(0, str(project_root))
 from dotenv import load_dotenv
 load_dotenv()
 
-# import nest_asyncio
-# try:
-#     nest_asyncio.apply()
-# except ValueError:
-#     # Fails if uvloop is running (default in uvicorn).
-#     # We need to run uvicorn with --loop asyncio
-#     print("⚠️ WARNING: Could not apply nest_asyncio. If using uvicorn, run with '--loop asyncio'")
-#     pass
+# Don't apply nest_asyncio here - it needs to be applied AFTER uvicorn creates the loop
+# We'll apply it on first request instead
 
 from api.forecast import router as forecast_router, dashboard_router as forecast_dashboard_router
 from api.forecast_performance import dashboard_router as forecast_performance_dashboard_router
@@ -80,13 +74,26 @@ app.include_router(diagnostics_router)
 
 from api.settings import router as settings_router
 from api.execution import router as execution_router
+from api.macro import router as macro_router
+from api.reports import router as reports_router
+from api.a2a import router as a2a_router
 app.include_router(settings_router)
 app.include_router(execution_router)
+app.include_router(macro_router)
+app.include_router(reports_router)
+app.include_router(a2a_router)
 
 # Root endpoint
 @app.get("/")
 async def root():
     """Root endpoint."""
+    # Apply nest_asyncio on first request (after event loop is created)
+    try:
+        import nest_asyncio
+        nest_asyncio.apply()
+    except:
+        pass
+    
     return {
         "message": "FuggerBot API",
         "version": "1.0.0",

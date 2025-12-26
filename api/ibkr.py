@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 import logging
 from execution.connection_manager import get_connection_manager
+from services.ibkr_client import get_ibkr_client
+
+logger = logging.getLogger("api.ibkr")
 
 router = APIRouter(prefix="/api/ibkr", tags=["ibkr"])
 

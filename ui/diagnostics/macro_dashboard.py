@@ -445,3 +445,4 @@ st.caption("FuggerBot v2.0 - Global Data Lake Diagnostics | Powered by DuckDB + 
 
 
 
+
