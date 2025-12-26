@@ -390,6 +390,25 @@ def test_test_mode_memory_readonly():
 
 ---
 
+## Required Outputs
+
+Each test run MUST produce:
+- Strategic interpretation artifacts
+- Scenario probability breakdowns
+- Regime context annotations
+- A2A feedback records
+
+Outputs are advisory and evaluative only.
+
+---
+
+## Authority Boundary
+
+FuggerBot provides interpretation, not decisions.
+Human judgment remains the sole authority.
+
+---
+
 ## Version Status
 
 **v1.1 — Testing & Evaluation Extension**
