@@ -1,70 +1,73 @@
-# Testing Initiation Prompt — Option A: Historical Replay (Deterministic)
+# Agents.md — Testing Initiation Prompt
+## Scenario A: Historical Replay (Deterministic)
 
-## Status
+### Status
 **Authoritative · Diagnostic-Only · Non-Mutating · v1.1**
-
-This prompt initiates a fully deterministic, non-mutating historical replay across
-**ai_inbox_digest v1.1** (Sensor Layer) and **FuggerBot v1.1** (Strategic Reasoner).
 
 ---
 
 ## Purpose
 
 Historical Replay exists to:
+1. Evaluate **signal detection quality** in ai_inbox_digest using hindsight.
+2. Evaluate **strategic interpretation correctness** in FuggerBot given historical context.
+3. Surface **false negatives and weak signals** without modifying live behavior.
+4. Produce **reproducible evidence artifacts** for human review.
 
-- Evaluate **signal detection quality** using real historical inputs
-- Observe **temporal behavior** (decay, corroboration, routing)
-- Assess **strategic interpretation correctness** with hindsight
-- Identify **false negatives** and **missed signal classes**
-
-This mode **does not exist** to:
+Historical Replay does NOT exist to:
+- Improve models
 - Tune thresholds
-- Modify decay behavior
-- Update memory or patterns
-- Improve models automatically
-- Produce capital or trade decisions
+- Learn patterns
+- Adapt decay
+- Influence live routing or strategy
 
-> **Testing observes reality. It does not change it.**
+> Testing observes reality. It does not change it.
 
 ---
 
 ## Global Testing Invariants (Hard Rules)
 
-The following rules are mandatory. Violation invalidates the test.
+The following rules are non-negotiable.  
+Violation invalidates the test.
 
 - `test_mode = True` MUST be enabled
-- No OpenAI / LLM clients may be instantiated
-- All AI agents MUST be deterministic test agents
-- No memory writes
-- No adaptive decay updates
-- No feedback-driven tuning
-- Outputs MUST be reproducible from identical inputs
+- NO OpenAI / LLM clients may be instantiated
+- ONLY deterministic Test* agents may execute
+- NO memory writes (read-only access only)
+- NO parameter updates
+- Outputs MUST be reproducible across runs
 
 ---
 
 ## System Entry Conditions
 
 ### ai_inbox_digest v1.1
-- Orchestrator initialized with `test_mode=True`
-- All AI agents swapped for deterministic `Test*` agents
-- Full evaluation artifacts persisted (lineage, decay, corroboration)
-- A2A payload includes full v1.1 schema
+- Frozen agent pipeline (Agents 1–13)
+- Deterministic Test Agents enabled
+- Shadow Replay (`test_mode=True`) supported
+- A2A emission enabled
+- Full artifact persistence active
 
 ### FuggerBot v1.1
-- StrategicReasoner initialized with `test_mode=True`
-- Memory access is read-only
-- No learning or pattern updates
-- Regime context allowed (read-only)
-- A2A feedback emission enabled
+- Strategic Reasoner only (advisory)
+- RegimeContextProvider enabled
+- Test mode enforced
+- No learning, memory mutation, or adaptation
 
 ---
 
 ## Initiation Prompt (Authoritative)
 
-> **Initiate Historical Replay (Deterministic) using archived historical inputs.  
-> Replay must proceed with test_mode=True across all agents.  
-> No adaptive, stochastic, or learning behavior is permitted.  
-> All outputs must be diagnostic, explainable, and reproducible.**
+> Initiate a deterministic Historical Replay using archived email data.
+> 
+> ai_inbox_digest SHALL replay historical messages through the frozen v1.1
+> sensor pipeline with test_mode enabled, emitting A2A signals with full
+> lineage and audit annotations.
+> 
+> FuggerBot SHALL ingest each signal, apply regime-aware strategic interpretation,
+> generate scenario framing and probabilities, and emit structured A2A feedback.
+> 
+> No system behavior may adapt, learn, or mutate as a result of this replay.
 
 ---
 
@@ -72,8 +75,7 @@ The following rules are mandatory. Violation invalidates the test.
 
 ### ai_inbox_digest
 ```bash
-export TEST_MODE=true
-python replay.py --source history/2019_emails.json --mode historical
+TEST_MODE=true python replay.py --source history/2019_emails.json
 ```
 
 ### FuggerBot
@@ -181,4 +183,3 @@ No agent may make capital decisions or recommendations.
 ---
 
 **End of Historical Replay Testing Prompt**
-
