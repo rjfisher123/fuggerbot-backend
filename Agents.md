@@ -1,60 +1,103 @@
-# 🛠️ FuggerBot Repair Mission: "Operation Clean Slate"
+# FuggerBot — Agents.md (v1.1)
 
-## 1. Situation Analysis
-The system is theoretically feature-complete (v2.0), but functionally broken in two ways:
-1.  **The "Ghost" Data:** The War Games dashboard shows 0 trades and 0% return for BTC campaigns.
-    * *Root Cause:* The `learning_book.json` is likely empty/corrupt, causing the Simulator's proxy logic to reject every trade.
-2.  **Missing Assets:** The user cannot select "NVDA" in the War Games dropdown.
-    * *Root Cause:* `war_games_runner.py` is likely not iterating through the new `STOCKS` asset class defined in the Data Lake.
+## System Identity
+FuggerBot is a **Strategic Reasoner**.
 
----
+It consumes curated signals from ai_inbox_digest and produces:
+- Strategic interpretations
+- Regime-aware scenario analysis
+- Capital framing (non-executable)
+- Structured feedback to upstream sensors
 
-## 2. Objective
-We need to perform a **Deep Clean and Rebuild** of the data pipeline.
-
-**Target State:**
-- `data/ingest_global.py` successfully fetches NVDA.
-- `research/miner.py` successfully builds a valid `learning_book.json` ( > 100 records).
-- `daemon/simulator/war_games_runner.py` runs for BOTH BTC and NVDA, with proper risk management (no -90% losses).
+FuggerBot is advisory only.
 
 ---
 
-## 3. Implementation Tasks (Cursor Instructions)
-
-### Task A: Patch the Simulator (`daemon/simulator/war_games_runner.py`)
-1.  **Asset Scope:** Modify `run_all_scenarios()` to explicitly include `NVDA` and `ETH-USD` in the target list.
-    ```python
-    assets_to_test = ['BTC-USD', 'ETH-USD', 'NVDA', 'MSFT']
-    ```
-2.  **Risk Management (Critical):** Implement Volatility-Adjusted Sizing to prevent the -90% ruin seen previously.
-    -   `target_risk = account_equity * 0.02` (Risk 2% per trade).
-    -   `position_size = target_risk / (entry * 0.05)` (Assume 5% stop loss distance).
-    -   **Cap:** `max_position_size = 0.2` (Never bet >20% of account).
-
-### Task B: Patch the Miner (`research/miner.py`)
-1.  Ensure it uses `yf.Ticker(symbol).history()` (Safe Mode) to avoid the `progress` bug.
-2.  Add a fallback: If `learning_book.json` is empty, the Simulator should use a **Default Proxy** (e.g., "If Trust > 0.9, Take Trade") rather than doing nothing. *This prevents the "0 Trades" bug if mining fails.*
-
-### Task C: Verification Script (`scripts/verify_system.py`)
-Create a new script that prints the health status:
-- "Checking Data Lake... OK (300k rows)"
-- "Checking Learning Book... OK (150 records)"
-- "Checking War Games Results... OK (NVDA Found)"
+## Architectural Invariants
+- No trade execution
+- No automated capital deployment
+- Human decision authority preserved
+- Sensor → Strategy separation enforced
+- Explainability before optimization
 
 ---
 
-## 4. Execution Sequence for the User
+## Core Agent
 
-After you (Cursor) complete the code edits, instruct the user to run this **exact sequence** to reboot the brain:
+### StrategicReasonerAgent (v1.1)
 
-1.  `python data/ingest_global.py` (Ensure NVDA data exists)
-2.  `python research/miner.py` (Rebuild the Brain)
-3.  `python daemon/simulator/war_games_runner.py` (Run the Simulation)
-4.  `streamlit run tools/dashboard.py` (Verify Fix)
+**Purpose**
+Transform high-confidence signals into strategic insight.
 
+**Responsibilities**
+- Interpret signals in macro and market context
+- Infer applicable regimes
+- Generate scenario framing (base / bull / bear)
+- Assign probabilistic confidence
+- Emit structured A2AFeedback upstream
 
+**Inputs**
+- A2ASignal (v1.1) with full lineage and annotations
+- Regime context (from RegimeTracker)
 
+**Outputs**
+- StrategicInterpretation
+- Scenario probabilities
+- Confidence annotations
+- A2AFeedback
 
+---
 
+## Regime Awareness
+FuggerBot integrates a RegimeContextProvider:
+- Macro regime detection
+- Market regime overlays
+- Second-order interaction analysis
 
+Regime logic informs interpretation but never execution.
 
+---
+
+## Test Mode (v1.1)
+When TEST_MODE=true:
+- Memory access is read-only
+- No learning or pattern mutation
+- No adaptive behavior
+- Interpretations are deterministic
+
+Used for:
+- Historical replay
+- Shadow evaluation
+- Backtesting strategic logic
+
+---
+
+## Memory & Learning (Future, Disabled)
+Pattern learning and memory mutation are explicitly disabled in v1.1.
+Any future activation requires a new version and updated Agents.md.
+
+---
+
+## A2A Feedback Contract
+FuggerBot emits A2AFeedback containing:
+- signal_id
+- signal_class
+- feedback_type (interest / low_interest / irrelevant)
+- confidence
+- timestamp
+
+Feedback is advisory and non-binding.
+
+---
+
+## Prohibited Capabilities
+- Execution authority
+- Capital allocation
+- Order placement
+- Sensor-layer mutation
+
+---
+
+## Version Status
+v1.1 — **Strategic Depth Complete**
+Ready for evaluation and replay testing.
