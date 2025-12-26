@@ -1,84 +1,77 @@
 # Agents.md — Testing Initiation Prompt
 ## Scenario A: Historical Replay (Deterministic)
 
-### Status
-**Authoritative · Diagnostic-Only · Non-Mutating · v1.1**
+**Version:** v1.1  
+**Status:** Authoritative · Diagnostic-Only · Non-Mutating
 
 ---
 
 ## Purpose
 
-Historical Replay exists to:
-1. Evaluate **signal detection quality** in ai_inbox_digest using hindsight.
-2. Evaluate **strategic interpretation correctness** in FuggerBot given historical context.
-3. Surface **false negatives and weak signals** without modifying live behavior.
-4. Produce **reproducible evidence artifacts** for human review.
+Historical Replay exists to evaluate, with hindsight:
 
-Historical Replay does NOT exist to:
-- Improve models
-- Tune thresholds
-- Learn patterns
-- Adapt decay
-- Influence live routing or strategy
+1. Signal detection quality (what was surfaced vs missed)
+2. Temporal handling (decay, lag, corroboration timing)
+3. Strategic interpretation correctness under known outcomes
+4. Evidence quality and explainability (lineage, annotations, feedback)
 
-> Testing observes reality. It does not change it.
+Historical Replay does **NOT** exist to:
+- Improve models or thresholds
+- Tune decay, scoring, or regimes
+- Modify memory or behavior
+- Produce capital allocation or trade advice
+- Influence live system behavior
 
 ---
 
 ## Global Testing Invariants (Hard Rules)
 
-The following rules are non-negotiable.  
-Violation invalidates the test.
+The following **MUST** hold for the test to be valid:
 
-- `test_mode = True` MUST be enabled
-- NO OpenAI / LLM clients may be instantiated
-- ONLY deterministic Test* agents may execute
-- NO memory writes (read-only access only)
-- NO parameter updates
-- Outputs MUST be reproducible across runs
+- `test_mode = True` **SHALL** be enabled
+- All memory access is **read-only**
+- **No OpenAI / LLM clients** may be instantiated
+- Deterministic `Test*Agent` implementations **MUST** be used
+- No adaptive behavior, learning, or persistence is permitted
+- Outputs **MUST** be reproducible across runs
+
+Violation of any invariant **invalidates the test**.
 
 ---
 
 ## System Entry Conditions
 
 ### ai_inbox_digest v1.1
-- Frozen agent pipeline (Agents 1–13)
-- Deterministic Test Agents enabled
-- Shadow Replay (`test_mode=True`) supported
-- A2A emission enabled
-- Full artifact persistence active
+- Agents 11–13 active and frozen
+- Shadow Replay (`test_mode=True`) enabled
+- Deterministic Test Agents in place for all AI-backed stages
+- A2A contract v1.1 enforced
 
 ### FuggerBot v1.1
 - Strategic Reasoner only (advisory)
-- RegimeContextProvider enabled
-- Test mode enforced
-- No learning, memory mutation, or adaptation
+- Regime context enabled
+- `test_mode=True`
+- Memory and learning disabled
+- A2A ingest and feedback endpoints active
 
 ---
 
-## Initiation Prompt (Authoritative)
+## Authoritative Initiation Prompt
 
-> Initiate a deterministic Historical Replay using archived email data.
-> 
-> ai_inbox_digest SHALL replay historical messages through the frozen v1.1
-> sensor pipeline with test_mode enabled, emitting A2A signals with full
-> lineage and audit annotations.
-> 
-> FuggerBot SHALL ingest each signal, apply regime-aware strategic interpretation,
-> generate scenario framing and probabilities, and emit structured A2A feedback.
-> 
-> No system behavior may adapt, learn, or mutate as a result of this replay.
+> **Initiate a deterministic historical replay using archived email data.**  
+> The system SHALL process historical messages in chronological order, emit v1.1-compliant A2A signals with full lineage and audit annotations, route them to FuggerBot for strategic interpretation, and collect structured feedback.  
+> No system state, memory, thresholds, or adaptive parameters may be modified.
 
 ---
 
 ## Reference Invocation Pattern
 
-### ai_inbox_digest
+### ai_inbox_digest (Sensor Layer)
 ```bash
 TEST_MODE=true python replay.py --source history/2019_emails.json
 ```
 
-### FuggerBot
+### FuggerBot (Strategic Reasoner)
 ```python
 from agents.strategic import get_strategic_reasoner
 
