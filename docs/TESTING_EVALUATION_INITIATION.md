@@ -1,161 +1,178 @@
-# Agents.md — Testing Initiation Prompts (v1.1)
+# Agents.md — Testing & Evaluation Initiation Prompts (v1.1)
 
-**Status**
-
-Authoritative · Diagnostic-Only · Non-Mutating
+**Status:** Authoritative · Diagnostic-Only · Non-Mutating
 
 **Applies to:**
 - ai_inbox_digest v1.1 (Sensor Layer)
 - FuggerBot v1.1 (Strategic Reasoner)
 
-This document defines the explicit prompts and procedures used to initiate testing.
-Testing is observational and evaluative only. No evolution is permitted.
+---
+
+## 1. Purpose of Testing
+
+Testing is observational and evaluative only.
+
+Testing exists to:
+- Validate signal quality, routing, and explainability
+- Evaluate strategic interpretation and regime sensitivity
+- Detect false negatives and boundary failures
+- Build human confidence prior to live use
+
+Testing does not exist to:
+- Improve models automatically
+- Tune thresholds
+- Adapt behavior
+- Execute trades
+- Recommend capital actions
 
 ---
 
-## Global Testing Invariants (Hard Rules)
+## 2. Global Testing Invariants (Hard Rules)
 
-The following invariants must hold for all tests:
-- `test_mode = True`
+These rules are non-negotiable.
+- `test_mode = True` MUST be enabled
 - No memory writes
-- No adaptive decay updates
-- No learning or tuning
+- No learning, tuning, or adaptation
 - Deterministic, reproducible outputs
-- No execution, allocation, or trade advice
-- Human authority retained at all times
+- Advisory outputs only
+- Human authority remains final
 
 Violation of any invariant invalidates the test.
 
 ---
 
-## Testing Entry Conditions
+## 3. Testing Entry Conditions
 
-### ai_inbox_digest (Sensor Layer)
+### ai_inbox_digest MUST:
+- Run with `TEST_MODE=true`
+- Emit full A2ASignal v1.1 payloads
+- Attach lineage, decay, corroboration metadata
+- Persist evaluation artifacts (JSONL)
 
-Before testing:
-- Orchestrator initialized with `test_mode=True`
-- A2A signals include full v1.1 payload:
-  - SignalLineage
-  - base_priority
-  - decay_annotation
-  - corroboration_score
-- No adaptive decay mutations permitted
-- Shadow Replay mode enabled
-
-### FuggerBot (Strategic Reasoner)
-
-Before testing:
-- StrategicReasonerAgent initialized with `test_mode=True`
-- Memory access is read-only
-- Pattern learning disabled
-- RegimeContextProvider active
-- A2A ingest endpoint reachable
+### FuggerBot MUST:
+- Run with `test_mode=True`
+- Accept A2A signals via ingest endpoint
+- Produce deterministic interpretations
+- Emit structured A2A feedback
+- Perform no memory mutation
 
 ---
 
-## Authorized Testing Scenarios
+## 4. Authorized Testing Scenarios
 
 ### Scenario A — Historical Replay
 
-**Purpose:**
-Evaluate how historical signals would have been interpreted at the time.
-
 **Prompt:**
 
-> "Replay historical signals in test mode.
-> Produce strategic interpretations, regime context, and scenario framing.
-> Do not mutate memory or adapt behavior."
+> "Replay historical email signals using preserved timestamps.
+> Evaluate whether ai_inbox_digest would have surfaced the signal and how FuggerBot interprets it given historical regime context.
+> No state mutation permitted."
+
+**Invocation Pattern:**
+- Source: historical email dataset
+- Mode: historical
+- Time-aligned with known market events
 
 ---
 
 ### Scenario B — Shadow Evaluation
 
-**Purpose:**
-Compare interpretations across versions or configurations.
-
 **Prompt:**
 
-> "Ingest identical signals in parallel test runs.
-> Compare interpretations and scenario probabilities.
-> Record differences without ranking or preference."
+> "Process signals in parallel with live logic, but in test_mode.
+> Compare routed vs ignored signals without influencing the live system."
+
+**Invocation Pattern:**
+- Source: recent emails
+- Mode: shadow
+- Outputs written to test artifacts only
 
 ---
 
 ### Scenario C — Backtesting Strategic Logic
 
-**Purpose:**
-Assess reasoning quality against known historical outcomes.
-
 **Prompt:**
 
-> "Process historical signals deterministically.
-> Emit interpretations and feedback.
-> Do not reference outcomes during interpretation."
+> "Evaluate FuggerBot's strategic interpretations against known macro outcomes.
+> Assess scenario framing, regime sensitivity, and feedback discipline.
+> No capital advice permitted."
+
+**Invocation Pattern:**
+- Source: curated historical signals
+- Mode: backtest
+- Human-led evaluation
 
 ---
 
-## Required Outputs (Evidence)
+## 5. Required Outputs (Evidence)
 
 ### From ai_inbox_digest
-- Routed A2A signals (v1.1 schema)
-- Lineage records
-- Base and effective priorities
+- Routed and rejected signals
+- Signal lineage records
+- Base priority and decay annotations
 - Corroboration scores
-- Audit artifacts
+- Audit reports (false negatives)
 
 ### From FuggerBot
 - Strategic interpretations
 - Regime context annotations
 - Scenario probability breakdowns
-- A2A feedback records (diagnostic only)
+- A2A feedback records
+
+All outputs must be inspectable and reproducible.
 
 ---
 
-## Evaluation (Human-Led)
+## 6. Evaluation (Human-Led)
 
-After testing, humans evaluate:
-1. Did interpretations align with contemporaneous context?
-2. Were regime effects correctly identified?
-3. Were scenarios coherent and explainable?
-4. Was feedback disciplined and non-prescriptive?
-5. Were all invariants preserved?
+Human reviewers must answer:
+1. Was the signal detected appropriately?
+2. Was decay behavior reasonable?
+3. Was corroboration adequate?
+4. Did regime context materially affect interpretation?
+5. Was feedback disciplined and proportional?
 
 No automated score replaces human judgment.
 
 ---
 
-## Prohibited Activities During Testing
+## 7. Prohibited Activities During Testing
 
-The following are explicitly forbidden:
+Explicitly forbidden:
+- Trade execution
 - Capital allocation advice
-- Trade suggestions
 - Memory updates
 - Threshold tuning
-- Adaptive decay changes
-- Any form of self-improvement
+- Self-improvement
+- Strategy evolution
 
-Testing informs future versions only.
+Testing is diagnostic, not evolutionary.
 
 ---
 
-## Testing Exit Criteria
+## 8. Testing Exit Criteria
 
 Testing may conclude when:
 - All scenarios complete
-- Outputs reviewed by humans
-- Findings documented externally
-- No system state has changed
+- Artifacts reviewed
+- Human confidence achieved
 
-No automatic progression is allowed.
+Testing does not auto-advance system versions.
 
 ---
 
-## Authority Boundary Reminder
-- ai_inbox_digest detects and refines signals
-- FuggerBot interprets meaning and context
-- Humans decide actions
+## 9. Authority Boundary Reminder
+- ai_inbox_digest → Detects and refines signals
+- FuggerBot → Interprets meaning and context
+- Humans → Decide action
 
-This boundary is absolute.
+No agent holds authority over capital.
+
+---
+
+## Core Principle
+
+Testing observes reality. It does not change it.
 
 ---
 
@@ -164,7 +181,3 @@ This boundary is absolute.
 - [Agents.md](../Agents.md) - Core system specification
 - [Testing & Evaluation Guide](./TESTING_EVALUATION.md) - Detailed testing procedures
 - [A2A Integration Test Guide](./A2A_INTEGRATION_TEST.md) - Integration testing
-
----
-
-**End of Testing Initiation Prompts**
