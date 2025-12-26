@@ -1,0 +1,37 @@
+feat: Historonics Agent - Historical Research and Hypothesis Generation
+
+Implements a read-only historical research agent that generates structured hypotheses
+about what to study next, without modifying simulation logic, scoring, or parameters.
+
+Components:
+- historonics_schema.py: Pydantic models for hypotheses (Hypothesis, HistoricalAnalog, HistoronicsOutput)
+- historonics_prompts.py: LLM safety-enforced prompt templates
+- historonics_agent.py: Main agent with DeepSeek LLM integration via OpenRouter
+
+Integration:
+- Added to research_loop.py (Step 5: after memory update, before proposal generation)
+- Optional integration in research reports (appendix_historonics_hypotheses)
+- Markdown renderer supports "Historical Context & Hypothesis Generation" section
+
+Safety Mechanisms:
+- Prompt constraints: Explicit "research historian, not trader" role
+- Output validation: Rejects numeric prescriptions, executable code, certainty claims
+- Error handling: Graceful degradation, non-blocking, returns empty on failure
+
+Invariants Preserved:
+✅ Deterministic execution (outputs advisory only)
+✅ Append-only learning (read-only, no mutation)
+✅ Strict role separation (Simulator/Meta-evaluator unchanged)
+✅ LLMs never authorities (cannot set params, rank strategies, influence returns)
+
+The agent exists to steepen the learning curve through historical context,
+not to shortcut it through optimization.
+
+Files:
+- agents/research/historonics_schema.py (new)
+- agents/research/historonics_prompts.py (new)
+- agents/research/historonics_agent.py (new)
+- daemon/research_loop.py (modified - added Historonics call)
+- agents/research/report/report_schema.py (modified - added hypotheses field)
+- agents/research/report/markdown_renderer.py (modified - added rendering)
+

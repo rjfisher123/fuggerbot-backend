@@ -1,0 +1,10 @@
+{
+  "report_id": "path_test",
+  "generated_at": "2025-12-25T10:23:34.310544",
+  "strategy_version": "1.0.0",
+  "research_loop_version": "2.0",
+  "data_fingerprint": "09edd5ed592f59b3",
+  "scenario_count": 36,
+  "insight_count": 1,
+  "simulator_commit_hash": "unknown"
+}

@@ -1,0 +1,2 @@
+"""Report diff module."""
+

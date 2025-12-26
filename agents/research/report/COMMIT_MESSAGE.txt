@@ -1,0 +1,35 @@
+feat: Research Report Hardening v0.7 - Sharpe Sanity, Evidence Gating, Proposal Capping
+
+Implements three critical hardening upgrades for decision-grade research reports:
+
+1. Sharpe Ratio Sanity & Disclosure
+   - Excludes NaN/±inf Sharpe values from all statistics
+   - Reports median, p10/p90 Sharpe ratios
+   - Tracks invalid Sharpe count with disclosure
+   - Adds Sharpe definition block in appendix (periodicity, annualization, risk-free rate assumptions)
+
+2. Insight Evidence Gating
+   - Strong insights require >=3 scenarios AND >=2 regime coverage
+   - Single-scenario/high-confidence insights downgraded to PRELIMINARY
+   - New grouping: "Strong Insights (Evidence-Qualified)" vs "Preliminary Insights (Insufficient Evidence)"
+   - Clear evidence requirements displayed in report
+
+3. Recommendation Proposal Cap + Grouping
+   - Displays only top 3 experiments (by information gain)
+   - Remaining proposals grouped in "Experiment Backlog (Deferred)"
+   - Backlog entries grouped by type with deferral reasons
+
+Invariants Preserved:
+- No changes to Sharpe computation logic (reporting-only)
+- No changes to insight generation (classification-only)
+- No changes to proposal generation/ranking (rendering-only)
+- Deterministic output maintained
+- Append-only learning preserved
+
+Files Modified:
+- report_schema.py: Added InsightEvidenceStatus enum, extended PerformanceMetrics/ReportInsight
+- report_generator.py: Added Sharpe filtering, evidence gating logic, metric definitions
+- markdown_renderer.py: Enhanced Sharpe display, evidence-based insight grouping, proposal capping
+
+Tested: All three upgrades verified with 36-scenario report.
+
