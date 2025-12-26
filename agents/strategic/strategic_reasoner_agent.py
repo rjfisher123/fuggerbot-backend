@@ -84,22 +84,32 @@ class StrategicInterpretation(BaseModel):
 
 class StrategicReasonerAgent:
     """
-    Strategic Reasoner Agent - FuggerBot v1.0.
+    Strategic Reasoner Agent - FuggerBot v1.1.
+    
+    Non-executing strategic reasoner that consumes curated signals and produces
+    interpretive insight, not actions.
     
     Mental Model: A family office CIO reading a perfectly filtered intelligence brief,
     not a trader staring at a ticker. Reasons slowly, conservatively, and contextually.
     
     Core Responsibilities:
-    1. Strategic Interpretation
+    1. Strategic Interpretation (regime-aware, scenario-framed)
     2. Capital Framing (Non-Executable)
     3. A2A Feedback Emission
+    
+    Testing Mode (test_mode=True):
+    - No memory mutation
+    - No pattern learning
+    - No adaptive behavior
+    - Used for historical replay and shadow evaluation
     """
     
     def __init__(
         self,
         a2a_adapter: Optional[A2AAdapter] = None,
         memory_store: Optional[Any] = None,  # TODO: Type this properly when memory is integrated
-        regime_tracker: Optional[Any] = None  # Optional RegimeTracker instance
+        regime_tracker: Optional[Any] = None,  # Optional RegimeTracker instance
+        test_mode: bool = False  # Testing mode: no mutation, no learning, no adaptive behavior
     ):
         """
         Initialize Strategic Reasoner Agent.
@@ -108,11 +118,18 @@ class StrategicReasonerAgent:
             a2a_adapter: A2A adapter for signal ingestion and feedback emission
             memory_store: Optional memory store for historical context
             regime_tracker: Optional regime tracker for regime-aware interpretation (v1.1)
+            test_mode: If True, enforces no memory mutation, no pattern learning, no adaptive behavior.
+                      Used for historical replay and shadow evaluation.
         """
         self.a2a_adapter = a2a_adapter or A2AAdapter()
         self.memory_store = memory_store
+        self.test_mode = test_mode
         self.regime_context_provider = get_regime_context_provider(regime_tracker=regime_tracker)
-        logger.info("Strategic Reasoner Agent initialized (v1.1)")
+        
+        if test_mode:
+            logger.info("Strategic Reasoner Agent initialized (v1.1) - TEST MODE: No mutation, no learning, no adaptive behavior")
+        else:
+            logger.info("Strategic Reasoner Agent initialized (v1.1)")
     
     def process_signal(self, signal: A2ASignal) -> StrategicInterpretation:
         """
@@ -369,7 +386,8 @@ class StrategicReasonerAgent:
 def get_strategic_reasoner(
     a2a_adapter: Optional[A2AAdapter] = None,
     memory_store: Optional[Any] = None,
-    regime_tracker: Optional[Any] = None
+    regime_tracker: Optional[Any] = None,
+    test_mode: bool = False
 ) -> StrategicReasonerAgent:
     """
     Factory function to get a Strategic Reasoner Agent instance.
@@ -378,9 +396,16 @@ def get_strategic_reasoner(
         a2a_adapter: Optional A2A adapter instance
         memory_store: Optional memory store instance
         regime_tracker: Optional regime tracker instance (v1.1)
+        test_mode: If True, enforces no memory mutation, no pattern learning, no adaptive behavior.
+                  Used for historical replay and shadow evaluation.
     
     Returns:
         StrategicReasonerAgent instance
     """
-    return StrategicReasonerAgent(a2a_adapter=a2a_adapter, memory_store=memory_store, regime_tracker=regime_tracker)
+    return StrategicReasonerAgent(
+        a2a_adapter=a2a_adapter,
+        memory_store=memory_store,
+        regime_tracker=regime_tracker,
+        test_mode=test_mode
+    )
 

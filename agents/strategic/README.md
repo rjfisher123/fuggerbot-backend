@@ -95,13 +95,28 @@ print(f"Summary: {interpretation.strategic_summary}")
 
 ---
 
+## Testing Mode
+
+The Strategic Reasoner supports `test_mode=True` for historical replay and shadow evaluation:
+
+- **No memory mutation**: Memory is read-only
+- **No pattern learning**: No adaptive behavior or pattern accumulation
+- **No adaptive behavior**: Deterministic, reproducible interpretations
+- **Used for**: Historical replay, shadow evaluation, backtesting
+
+Example:
+```python
+reasoner = get_strategic_reasoner(test_mode=True)
+interpretation = reasoner.process_signal(signal)
+```
+
 ## Safety & Invariants
 
 ### Must Obey
 
 - ❌ **No autonomous execution**
 - ❌ **No hidden heuristics**
-- ❌ **No silent memory mutation**
+- ❌ **No silent memory mutation** (enforced in test_mode)
 - ❌ **No upstream override**
 - ✅ **Explainable reasoning**
 - ✅ **Conservative uncertainty**
