@@ -181,3 +181,4 @@ Testing observes reality. It does not change it.
 - [Agents.md](../Agents.md) - Core system specification
 - [Testing & Evaluation Guide](./TESTING_EVALUATION.md) - Detailed testing procedures
 - [A2A Integration Test Guide](./A2A_INTEGRATION_TEST.md) - Integration testing
+- [Historical Replay Testing Prompt](./TESTING_HISTORICAL_REPLAY.md) - Scenario A detailed prompt
