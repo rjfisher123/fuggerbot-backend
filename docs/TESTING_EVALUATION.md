@@ -38,6 +38,36 @@ reasoner = get_strategic_reasoner(test_mode=True)
 - No adaptive behavior
 - Interpretations are **deterministic and reproducible**
 
+### Guarantees
+When test_mode is enabled:
+- Memory is read-only
+- Pattern learning is disabled
+- Interpretations are deterministic
+- No adaptive or persistent behavior is allowed
+- Outputs are reproducible
+
+---
+
+## Authorized Testing Objectives
+
+### Objective 1 — Strategic Interpretation Quality
+Evaluate whether interpretations:
+- Add insight beyond raw signal summaries
+- Reflect appropriate regime context
+- Surface second-order implications clearly
+
+### Objective 2 — Regime Sensitivity
+Evaluate whether:
+- Scenario framing shifts meaningfully across regimes
+- Probability weights respond to macro context
+- Bull/base/bear narratives are coherent and explainable
+
+### Objective 3 — Feedback Discipline
+Evaluate whether A2A feedback:
+- Is proportional and well-structured
+- Avoids hindsight bias
+- Clearly communicates "low interest" vs "missed signal"
+
 ---
 
 ## Testing Scenarios
@@ -289,7 +319,18 @@ For historical replay and backtesting, signals must include:
 
 ---
 
-## Prohibited in Test Mode
+## Prohibited Activities During Testing
+
+The following are forbidden:
+- Capital allocation advice
+- Trade suggestions
+- Memory updates
+- Threshold tuning based on outcomes
+- Any form of self-improvement
+
+Testing is **diagnostic**, not evolutionary.
+
+### Additional Prohibited Behaviors
 
 Even in test mode, FuggerBot MUST NOT:
 
