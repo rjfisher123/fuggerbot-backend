@@ -1,41 +1,39 @@
-# Agents.md — Testing Initiation Prompt
-## Scenario A: Historical Replay (Deterministic)
+# Agents.md — Scenario A Testing Prompt
+## Historical Replay (Deterministic · v1.1)
 
-**Version:** v1.1  
-**Status:** Authoritative · Diagnostic-Only · Non-Mutating
+**Status:** Authoritative · Diagnostic-Only · Non-Mutating  
+**Applies To:** ai_inbox_digest v1.1 → FuggerBot v1.1  
+**Scenario:** A — Historical Replay
 
 ---
 
 ## Purpose
 
-Historical Replay exists to evaluate, with hindsight:
+Historical Replay exists to:
 
-1. Signal detection quality (what was surfaced vs missed)
-2. Temporal handling (decay, lag, corroboration timing)
-3. Strategic interpretation correctness under known outcomes
-4. Evidence quality and explainability (lineage, annotations, feedback)
+1. Evaluate historical signal detection quality using hindsight data
+2. Validate temporal handling (decay, relevance, corroboration)
+3. Assess strategic interpretation correctness downstream
+4. Produce explainable, auditable artifacts for human review
 
-Historical Replay does **NOT** exist to:
-- Improve models or thresholds
-- Tune decay, scoring, or regimes
-- Modify memory or behavior
-- Produce capital allocation or trade advice
-- Influence live system behavior
+Historical Replay does **not** exist to:
+- Modify system behavior
+- Tune thresholds
+- Train agents
+- Learn patterns
+- Execute or recommend capital actions
 
 ---
 
-## Global Testing Invariants (Hard Rules)
+## Global Invariants (Hard Rules)
 
-The following **MUST** hold for the test to be valid:
+During Historical Replay:
 
-- `test_mode = True` **SHALL** be enabled
-- All memory access is **read-only**
-- **No OpenAI / LLM clients** may be instantiated
-- Deterministic `Test*Agent` implementations **MUST** be used
-- No adaptive behavior, learning, or persistence is permitted
-- Outputs **MUST** be reproducible across runs
-
-Violation of any invariant **invalidates the test**.
+- `test_mode = true` **MUST** be enabled
+- No LLM clients **MAY** be instantiated
+- No memory **MAY** be mutated
+- All outputs **MUST** be deterministic and reproducible
+- Violating any invariant invalidates the test
 
 ---
 
@@ -56,17 +54,40 @@ Violation of any invariant **invalidates the test**.
 
 ---
 
-## Authoritative Initiation Prompt
+## Historical Input Normalization (MANDATED)
 
-> **Initiate a deterministic historical replay using archived email data.**  
-> The system SHALL process historical messages in chronological order, emit v1.1-compliant A2A signals with full lineage and audit annotations, route them to FuggerBot for strategic interpretation, and collect structured feedback.  
-> No system state, memory, thresholds, or adaptive parameters may be modified.
+Historical data **WILL NOT** conform to the v1.1 live `Message` schema.
+
+To preserve strict live contracts, Historical Replay **SHALL** apply a
+**deterministic normalization layer** prior to validation.
+
+### Authorized Normalizations (Replay-Only)
+
+| Field | Rule |
+|------|-----|
+| `id` | Accept `message_id` as alias |
+| `to` | If list → join into comma-separated string |
+| `timestamp` | Map from `date` / `sent_at` / `created_at` |
+| Missing optional fields | Fill explicitly with `null` |
+
+> This normalization **MUST NOT** exist in live ingestion paths.
 
 ---
 
-## Reference Invocation Pattern
+## Initiation Prompt (Authoritative)
 
-### ai_inbox_digest (Sensor Layer)
+> **Initiate Historical Replay using archived communications.**  
+>  
+> The system SHALL replay historical messages in strict test mode,
+> apply deterministic normalization, enforce v1.1 schemas,
+> emit A2A signals with full lineage, and prevent all state mutation.  
+>  
+> Outputs SHALL be produced solely for human evaluation.
+
+---
+
+## Reference Invocation (ai_inbox_digest)
+
 ```bash
 TEST_MODE=true python replay.py --source history/2019_emails.json
 ```
