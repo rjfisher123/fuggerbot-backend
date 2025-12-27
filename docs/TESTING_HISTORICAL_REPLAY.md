@@ -1,6 +1,7 @@
 # Agents.md — Scenario A Testing Prompt
-## Historical Replay (Deterministic · v1.1)
+## Historical Replay (Deterministic, Automated A2A Emission)
 
+**Version:** v1.1  
 **Status:** Authoritative · Diagnostic-Only · Non-Mutating  
 **Applies To:** ai_inbox_digest v1.1 → FuggerBot v1.1  
 **Scenario:** A — Historical Replay
@@ -11,46 +12,49 @@
 
 Historical Replay exists to:
 
-1. Evaluate historical signal detection quality using hindsight data
-2. Validate temporal handling (decay, relevance, corroboration)
-3. Assess strategic interpretation correctness downstream
-4. Produce explainable, auditable artifacts for human review
+1. Evaluate signal detection quality using historical inbox data with hindsight.
+2. Validate temporal handling (decay, prioritization) under simulated time.
+3. Verify end-to-end A2A contract compliance and ingestion.
+4. Assess strategic interpretation correctness without live system mutation.
 
 Historical Replay does **not** exist to:
-- Modify system behavior
 - Tune thresholds
-- Train agents
-- Learn patterns
-- Execute or recommend capital actions
+- Adapt models
+- Modify memory
+- Generate capital actions
+- Learn from outcomes
 
 ---
 
-## Global Invariants (Hard Rules)
+## Global Testing Invariants (HARD RULES)
 
-During Historical Replay:
+The following **MUST** hold. Violation invalidates the test:
 
-- `test_mode = true` **MUST** be enabled
-- No LLM clients **MAY** be instantiated
-- No memory **MAY** be mutated
-- All outputs **MUST** be deterministic and reproducible
-- Violating any invariant invalidates the test
+- `TEST_MODE=true` SHALL be enabled
+- Deterministic `Test*Agent` substitutions SHALL be enforced
+- No LLM / OpenAI clients SHALL be instantiated
+- No memory writes or adaptive behavior SHALL occur
+- Outputs MUST be reproducible across runs
+- Emission is allowed **only** via explicit opt-in
 
 ---
 
-## System Entry Conditions
+## Entry Conditions
 
-### ai_inbox_digest v1.1
-- Agents 11–13 active and frozen
-- Shadow Replay (`test_mode=True`) enabled
-- Deterministic Test Agents in place for all AI-backed stages
-- A2A contract v1.1 enforced
+### ai_inbox_digest v1.1 (Sensor Layer)
 
-### FuggerBot v1.1
-- Strategic Reasoner only (advisory)
-- Regime context enabled
-- `test_mode=True`
-- Memory and learning disabled
-- A2A ingest and feedback endpoints active
+- Core agents frozen (Agents 11–13)
+- Deterministic Test Agents available
+- Historical normalization layer enabled
+- Replay harness (`replay.py`) available
+- A2A emission disabled by default
+
+### FuggerBot v1.1 (Strategic Reasoner)
+
+- API running and reachable
+- `/api/a2a/ingest` endpoint operational
+- `test_mode=True` enforced
+- No execution or memory mutation enabled
 
 ---
 
@@ -74,49 +78,80 @@ To preserve strict live contracts, Historical Replay **SHALL** apply a
 
 ---
 
-## Initiation Prompt (Authoritative)
+## A2A Emission Mechanism
 
-> **Initiate Historical Replay using archived communications.**  
->  
-> The system SHALL replay historical messages in strict test mode,
-> apply deterministic normalization, enforce v1.1 schemas,
-> emit A2A signals with full lineage, and prevent all state mutation.  
->  
-> Outputs SHALL be produced solely for human evaluation.
+### Emission Control
+
+Historical replay **MAY** emit A2A signals **only** when explicitly invoked with `--emit-a2a`.
+
+Without this flag, replay **SHALL** produce outputs **only** for local analysis (logs, artifacts, JSON files).
+
+### Signal Validation Requirements
+
+Before emission, each signal **MUST** satisfy:
+
+- Valid `A2ASignal` schema (v1.1)
+- Complete `signal_lineage` with `upstream_message_ids`
+- Valid `decay_annotation` and `corroboration_annotation`
+- Non-null `signal_id`, `signal_class`, `summary`, `created_at`
+- `effective_priority` and `corroboration_score` within [0.0, 1.0]
+
+Any signal failing validation **SHALL** be logged and **SHALL NOT** be emitted.
+
+### Emission Behavior
+
+- **Chronological Ordering**: Signals **SHALL** be emitted in strict chronological order based on `created_at` timestamps
+- **Rate Limiting**: Default 10 signals/second (configurable via `--a2a-rate-limit`)
+- **Error Handling**: Log failures, continue with next signal, emit completion summary
 
 ---
 
-## Reference Invocation (ai_inbox_digest)
+## Authoritative Initiation Prompt
+
+> **Initiate a deterministic historical replay of archived inbox messages using ai_inbox_digest v1.1 in test mode. Normalize historical inputs to the v1.1 Message schema, simulate relative time, evaluate routing criteria, and—only for qualifying signals—emit fully validated A2A signals to FuggerBot v1.1 for strategic interpretation. The process SHALL be diagnostic, non-mutating, and reproducible.**
+
+---
+
+## Reference Invocation (Authoritative)
+
+### ai_inbox_digest — Replay + A2A Emission
+
+```bash
+TEST_MODE=true \
+A2A_TRANSPORT=http \
+A2A_ENDPOINT=http://localhost:8000/api/a2a/ingest \
+python replay.py \
+  --source history/2019_emails.json \
+  --emit-a2a
+```
+
+### Local Analysis Only (No Emission)
 
 ```bash
 TEST_MODE=true python replay.py --source history/2019_emails.json
 ```
 
 ### FuggerBot (Strategic Reasoner)
-```python
-from agents.strategic import get_strategic_reasoner
 
-reasoner = get_strategic_reasoner(test_mode=True)
-
-# Process historical signals in chronological order
-for signal in historical_signals:
-    interpretation = reasoner.process_signal(signal)
-    # Log interpretation (no mutation)
-```
+FuggerBot processes incoming A2A signals automatically via `/api/a2a/ingest` endpoint with `test_mode=True`.
 
 ---
 
 ## Expected Outputs
 
 ### From ai_inbox_digest
-- Routed A2ASignal payloads (v1.1 schema)
+
+- Routed A2ASignal payloads (v1.1 schema) - if `--emit-a2a` enabled
 - Rejected signals with rejection reasons
 - Signal lineage records
 - Decay annotations (historical timestamps)
 - Corroboration scores
 - Audit artifacts (false negatives)
+- Emission logs (if `--emit-a2a` enabled)
+- Replay summary with statistics
 
 ### From FuggerBot
+
 - Strategic interpretations for each signal
 - Regime context annotations (historical regime state)
 - Scenario probability breakdowns (base/bull/bear)
@@ -139,12 +174,17 @@ After replay, human reviewers assess:
    - Did corroboration scores reflect signal quality?
    - Were routing decisions consistent?
 
-3. **Strategic Interpretation**
+3. **A2A Contract Compliance**
+   - Were all emitted signals valid v1.1 schema?
+   - Was lineage complete and accurate?
+   - Did emission respect chronological ordering?
+
+4. **Strategic Interpretation**
    - Did interpretations align with contemporaneous market context?
    - Were regime effects correctly identified?
    - Were scenarios coherent and explainable?
 
-4. **Reproducibility**
+5. **Reproducibility**
    - Same inputs → same outputs?
    - Are all outputs timestamped and traceable?
    - Can replay be rerun with identical results?
@@ -162,6 +202,7 @@ During Historical Replay, the following are explicitly forbidden:
 - Feedback-driven behavior modification
 - Trade or capital allocation advice
 - Any form of self-improvement
+- Emitting signals without `--emit-a2a` flag
 
 ---
 
@@ -175,13 +216,14 @@ Historical Replay is successful when:
 - False negatives are identified and categorized
 - No system state has been mutated
 - All artifacts are preserved for review
+- A2A emissions (if enabled) complete successfully with full validation
 
 ---
 
 ## Authority Boundary
 
-- **ai_inbox_digest**: Detects and refines historical signals
-- **FuggerBot**: Interprets signals in historical regime context
+- **ai_inbox_digest**: Detects, normalizes, and emits historical signals via A2A contract
+- **FuggerBot**: Interprets signals in historical regime context (test mode)
 - **Humans**: Evaluate quality and correctness
 
 No agent may make capital decisions or recommendations.
@@ -192,6 +234,7 @@ No agent may make capital decisions or recommendations.
 
 - [Testing & Evaluation Initiation Prompts](./TESTING_EVALUATION_INITIATION.md) - General testing framework
 - [Testing & Evaluation Guide](./TESTING_EVALUATION.md) - Detailed procedures
+- [Scenario A Extension (Deprecated)](./TESTING_HISTORICAL_REPLAY_A2A_EXTENSION.md) - Previously separate extension, now consolidated
 - [Agents.md](../Agents.md) - Core system specification
 
 ---
